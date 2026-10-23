@@ -20,6 +20,13 @@ Design: [`docs/design.md`](docs/design.md). How the prototype reads it: [`docs/r
 3. The turn plays back phase by phase: Guard -> Dash -> Attack -> Move -> Minions -> Tower & Base -> Upkeep.
    **Space** steps forward, or use Auto / Skip.
 
+Fog of war:
+- You see 3 tiles around your hero, Tower and Base, and 2 around your minions. Darkened tiles are fog.
+- A hero on a cover tile (grass) is hidden unless one of your units stands next to it.
+- A **?** marks where you last saw the enemy hero.
+- You can attack fogged tiles. Hitting a hidden hero reveals it.
+- Playback is shared, so it only shows a unit when its opponent can see it.
+
 Reading the board:
 - Arrows from minions show where they'll move next turn. Dashed lines and crosshairs show what each minion and
   structure will hit.
@@ -34,6 +41,7 @@ scripts/core/        Rules. Pure data and functions, no nodes.
   match_state.gd     The full game state (clonable)
   legality.gd        Legal moves/targets; cleans up illegal orders
   minion_ai.gd       Minion + structure decisions and telegraphs
+  vision.gd          Fog of war: who sees what, per-player and public views
   heroes.gd          Hero kits
   rules.gd           Every tunable number
   map_data.gd        The lane layout

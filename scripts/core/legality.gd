@@ -58,8 +58,6 @@ static func unavailable_reason(hero: Unit, action: HeroOrders.Action) -> String:
 		return "Level %d" % ab["level"]
 	if hero.cooldowns.get(key, 0) > 0:
 		return "Ready in %d" % hero.cooldowns[key]
-	if ab.get("needs_fog", false):
-		return "Needs fog"
 	return ""
 
 
@@ -112,7 +110,11 @@ static func target_options(s: MatchState, hero: Unit, action: HeroOrders.Action,
 				out.append(c)
 		return out
 	var r: int = ab["range"]
-	return _tiles_in_range(s, hero, origin, 999 if r == Heroes.ANY_RANGE else r)
+	out = _tiles_in_range(s, hero, origin, 999 if r == Heroes.ANY_RANGE else r)
+	if ab.get("visible_only", false):
+		var seen := Vision.visible_tiles(s, hero.side)
+		out = out.filter(func(c): return seen.has(c))
+	return out
 
 
 ## Any walkable tile within range except the hero's own tile, its own

@@ -21,8 +21,13 @@ const ORDER_COLOR := Color(1, 1, 1, 0.9)
 const STRIKE_COLOR := Color(1.0, 0.45, 0.2)
 const DELAYED_COLOR := Color(0.8, 0.5, 1.0)
 const WARN_COLOR := Color(1.0, 0.85, 0.2)
+const FOG := Color(0.02, 0.03, 0.05, 0.62)
+const PUBLIC := 2
 
 var state: MatchState
+## Whose eyes the board is drawn through: 0/1 = that side (fog shaded),
+## PUBLIC = shared playback (state is already a public view, no shading).
+var viewer := PUBLIC
 
 # Planning.
 var show_telegraphs := true
@@ -84,6 +89,7 @@ func _draw() -> void:
 	if state == null:
 		return
 	_draw_tiles()
+	_draw_fog()
 	for c in move_tiles:
 		draw_rect(Rect2(Vector2(c) * TILE, Vector2(TILE, TILE)).grow(-4), MOVE_FILL)
 	for c in target_tiles:
@@ -131,9 +137,34 @@ func _draw_tiles() -> void:
 				_text(r.position + Vector2(TILE * 0.5, TILE - 6), "spawn", 11, Color(1, 1, 1, 0.3))
 
 
+func _draw_fog() -> void:
+	if viewer == PUBLIC:
+		return
+	var seen := Vision.visible_tiles(state, viewer)
+	for y in state.map.height:
+		for x in state.map.width:
+			var c := Vector2i(x, y)
+			if state.map.is_walkable(c) and not seen.has(c):
+				draw_rect(Rect2(Vector2(c) * TILE, Vector2(TILE, TILE)), FOG)
+	for z in state.reveal_zones:
+		var r := Rect2(Vector2(z["center"] - Vector2i(1, 1)) * TILE, Vector2(TILE, TILE) * 3).grow(-3)
+		draw_rect(r, Color(0.8, 0.5, 1.0, 0.8), false, 2.0)
+	# Where the enemy hero was last seen.
+	var e := state.hero(1 - viewer)
+	var ls: Dictionary = state.last_seen[viewer]
+	if e != null and Vision.is_hidden(e) and not ls.is_empty():
+		var age: int = state.turn - ls["turn"]
+		var a := clampf(1.0 - float(age) / Rules.LAST_SEEN_FADE_TURNS, 0.25, 0.9)
+		var p := center(ls["pos"])
+		var col: Color = SIDE_COLORS[e.side]
+		draw_arc(p, 27, 0, TAU, 32, Color(col, a), 2.5)
+		_text(p + Vector2(0, 9), "?", 26, Color(col.lightened(0.3), a))
+		_text(p + Vector2(0, 36), "seen %s" % ("this turn" if age == 0 else "%d ago" % age), 11, Color(1, 1, 1, a))
+
+
 func _draw_telegraphs() -> void:
 	for u in state.units:
-		if not u.is_alive():
+		if not u.is_alive() or Vision.is_hidden(u):
 			continue
 		var col: Color = SIDE_COLORS[u.side].lightened(0.25)
 		if u.is_minion():
@@ -142,14 +173,14 @@ func _draw_telegraphs() -> void:
 			if u.intent_move != u.pos and u.intent_move != NO_CELL:
 				_arrow(from, to, Color(col, 0.75), 3.0)
 			var t := state.unit_by_id(u.intent_target)
-			if t != null:
+			if t != null and not Vision.is_hidden(t):
 				_dashed(to, center(t.pos), Color(1, 0.4, 0.3, 0.7))
 				_crosshair(center(t.pos), 12, Color(1, 0.4, 0.3, 0.8))
 			if u.aggro_warning:
 				_text(from + Vector2(16, -14), "!", 20, WARN_COLOR)
 		elif u.is_structure():
 			var t := state.unit_by_id(state.structure_targets.get(u.id, -1))
-			if t != null:
+			if t != null and not Vision.is_hidden(t):
 				_dashed(center(u.pos), center(t.pos), Color(1, 0.3, 0.3, 0.8))
 				_crosshair(center(t.pos), 16, Color(1, 0.3, 0.3, 0.9))
 			if state.structure_warnings.get(u.id, false):
@@ -158,37 +189,38 @@ func _draw_telegraphs() -> void:
 
 func _draw_links() -> void:
 	for u in state.units:
-		if not u.is_hero() or not u.is_alive():
+		if not u.is_hero() or not u.is_alive() or Vision.is_hidden(u):
 			continue
 		if not u.tether.is_empty():
 			var by := state.unit_by_id(u.tether["by"])
-			if by != null and by.is_alive():
+			if by != null and by.is_alive() and not Vision.is_hidden(by):
 				_dashed(center(by.pos), center(u.pos), Color(0.9, 0.6, 1.0, 0.9), 3.0)
 		if not u.follow_lock.is_empty():
 			var t := state.unit_by_id(u.follow_lock["target"])
-			if t != null and t.is_alive():
+			if t != null and t.is_alive() and not Vision.is_hidden(t):
 				draw_line(center(u.pos), center(t.pos), Color(1, 0.85, 0.3, 0.9), 4.0)
 
 
 func _draw_units() -> void:
 	var moving := {}
 	for e in phase_events:
-		if e["type"] == "move":
+		if e["type"] == "move" and e.get("draw", true):
 			moving[e["unit"]] = e
 	for u in state.units:
-		if not u.is_alive():
+		if not u.is_alive() or Vision.is_hidden(u):
 			continue
 		var p := center(u.pos)
-		if moving.has(u.id) and anim_t < 1.0:
+		var before := prev_state.unit_by_id(u.id) if prev_state != null else null
+		if moving.has(u.id) and anim_t < 1.0 and before != null and not Vision.is_hidden(before):
 			var e: Dictionary = moving[u.id]
 			p = center(e["from"]).lerp(center(e["to"]), ease(anim_t, -2.0))
 		_draw_unit(u, p, 1.0)
 	# Units that died this phase fade out where they stood.
 	if prev_state != null:
 		for u in prev_state.units:
-			if u.is_alive():
+			if u.is_alive() and not Vision.is_hidden(u):
 				var now := state.unit_by_id(u.id)
-				if now == null or not now.is_alive():
+				if now == null or not now.is_alive() or Vision.is_hidden(now):
 					_draw_unit(u, center(u.pos), 1.0 - anim_t)
 
 
@@ -269,6 +301,8 @@ func _draw_planned() -> void:
 func _draw_phase_effects() -> void:
 	var font_y := -30.0 * anim_t
 	for e in phase_events:
+		if not e.get("draw", true):
+			continue
 		var tile: Vector2i = e.get("tile", NO_CELL)
 		match e["type"]:
 			"hit":
@@ -285,11 +319,11 @@ func _draw_phase_effects() -> void:
 				_text(center(tile) + Vector2(0, 6), "X", 34, Color(1, 0.3, 0.3, 1.0 - anim_t * 0.5))
 			"gold":
 				var u := state.unit_by_id(e["unit"])
-				if u != null and u.is_alive():
+				if u != null and u.is_alive() and not Vision.is_hidden(u):
 					_text(center(u.pos) + Vector2(0, -40 + font_y), "+%dg" % e["amount"], 16, Color(1, 0.85, 0.3))
 			"level":
 				var u := state.unit_by_id(e["unit"])
-				if u != null and u.is_alive():
+				if u != null and u.is_alive() and not Vision.is_hidden(u):
 					_text(center(u.pos) + Vector2(0, 50), "LEVEL UP", 13, Color(0.6, 1, 0.6))
 
 

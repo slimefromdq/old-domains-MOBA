@@ -7,15 +7,18 @@ Every tunable number lives in `scripts/core/rules.gd` (or `scripts/core/heroes.g
 
 - **Turns:** simultaneous hot-seat turns. You pass the device, each player plans, then the turn plays back phase by phase.
 - **Phases:** all six, in the doc's order. Hero A's delayed shots get their own step right after Move.
-- **Heroes:** Hero A and Hero D, with full kits. The one exception is A's *Area reveal*, which needs fog of war.
+- **Heroes:** Hero A and Hero D, with full kits.
 - **Minions:** melee, ranged and siege. Each one telegraphs its next move and target, and aggro can override that.
 - **Tower and Base:** the Tower switches target to a hero who hit a hero. The Base can't be attacked while its Tower
   stands. When a Tower falls, its Base gets a shield and that side's next wave gets a siege minion.
 - **Economy:** gold, XP, levels, bounty, the contested-kill rule, denies, Recall, respawn timers, sudden death and the
   turn-30 hard cap.
+- **Fog of war:** vision radii, cover, last-known markers, hit reveals, and Area reveal (see "Fog of war" below).
 
-**Not yet:** fog/cover effects, the neutral objective, items/shop, Heroes B and C, bot, online play.
-Cover tiles and the objective spot are drawn on the map but do nothing yet.
+**Not yet:** the neutral objective, items/shop (including the Vision item), Heroes B and C, bot, online play.
+The objective spot is drawn on the map but does nothing yet.
+
+**Temporary change:** Tower and Base HP are 15, not the doc's 30, while we test pacing.
 
 ## Map
 
@@ -30,6 +33,34 @@ row 3   f . . . c . . . c . . . f
 - **Cover at col 4, not col 3.** With orthogonal range 2, col 3 is inside your own Tower's range, which would make
   it a safe turtling spot. At col 4 it sits just outside, so it's a forward tile both players fight over.
 - **Fountain (f):** the tiles beside each Base. Heroes start, respawn and Recall here; the shop will live here too.
+
+## Fog of war
+
+**From the doc:**
+- **Vision:** you see tiles within 3 of your hero, 2 of your minions, and 3 of your Tower and Base. Distance is
+  orthogonal, and walls don't block sight.
+- **Cover:** a hero on a cover tile is hidden unless one of your units is orthogonally adjacent to it.
+- **Last-known marker:** a hidden enemy hero leaves a "?" marker where you last saw it. It fades and disappears
+  after 4 turns (the 4 is assumed).
+- **Firing into fog:** attacking a tile you can't see is legal. Hitting a hidden hero reveals it for the rest of
+  this turn and all of the next.
+- **Area reveal (Hero A, level 3):** reveals a 3x3 area, including cover, from the Guard phase of this turn through
+  the end of the next. Only the caster's side sees the zone.
+
+**Interpretations:**
+- **Structures are always visible**, along with their HP.
+- **Cover only hides heroes.** Minions on cover tiles can be seen.
+- **Minions, Towers and Bases only auto-target units their side can see.** A ranged minion can't shoot a hero hidden
+  in cover; a melee minion is adjacent, so it spots the hero first. Aggro and Tower switching also need vision.
+- **Attacking from fog does not reveal you.** The doc only says the *target* is revealed. Playback shows the hit as
+  coming from "an unseen attacker".
+- **Orders are judged against what the player could see.** Your planned path can run into a hidden unit. When it
+  does, you stop on the last free tile before it.
+- **Hero A's Multi-target strike** can only pick tiles A's side can currently see ("visible tiles" in the doc).
+- **Hot-seat playback is public.** Both players watch the same screen, so playback only shows a unit if its
+  *opponent* can see it. Your own hero hidden in cover won't appear on the shared screen. Events involving hidden
+  units are reworded ("takes 3 from an unseen attacker") or left out. Each player sees their full fogged view while
+  planning.
 
 ## Interpretations
 
@@ -74,8 +105,15 @@ row 3   f . . . c . . . c . . . f
 | Total XP for levels 2-6 | 6 / 14 / 24 / 34 / 46 |
 | Base damage to minions | 1 |
 
-## First pacing signal
+## Pacing signals (scripted bots)
 
-Simple scripted bots (attack the weakest thing in range, otherwise walk toward the enemy Tower) drew every test match
-at the turn-30 cap without either Tower falling. Bots that dumb say little about real play. Still, watch for it in
-playtests: if real games stall too, sudden death may need to ramp harder, or towers may need less HP.
+The test bot is simple: it attacks the weakest thing in range, otherwise walks toward the enemy Tower.
+- **Bot vs bot:** every match draws at turn 30 with no Tower down, even at 15 HP. Equal waves cancel out in mid, so
+  this mostly shows the bots are mirror images of each other.
+- **Bot vs a player who never acts:** the enemy Tower falls around turns 24-27, the Base is never hit, and the match
+  is a **draw**. Both Bases are at full HP, and the hard cap only compares Base HP.
+
+Two things to consider:
+- Pushing may be too slow. Options: waves arrive faster, minions deal more damage to structures, or the turn cap
+  goes up.
+- Add a hard-cap tiebreaker, such as Towers standing, then total structure HP.

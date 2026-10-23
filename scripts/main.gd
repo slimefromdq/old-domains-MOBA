@@ -119,16 +119,18 @@ func _start_planning(side: int) -> void:
 	overlay.visible = false
 	stage = Stage.PLAN
 	planning_side = side
-	board.state = state
+	var view := Vision.view_for(state, side)
+	board.state = view
+	board.viewer = side
 	board.clear_overlays()
 	board.show_telegraphs = true
 	order_panel.visible = true
 	playback.visible = false
-	order_panel.begin(state, state.hero(side))
+	order_panel.begin(view, view.hero(side))
 	phase_label.text = "%s is planning" % Rules.SIDE_NAMES[side]
 	phase_label.add_theme_color_override("font_color", BoardView.SIDE_COLORS[side].lightened(0.3))
-	_update_header(state)
-	_update_cards(state)
+	_update_header(view)
+	_update_cards(view, side)
 
 
 func _on_orders_changed() -> void:
@@ -169,6 +171,8 @@ func _on_cell_hovered(cell: Vector2i) -> void:
 			var t := s.unit_by_id(u.intent_target)
 			parts.append("next: -> %s%s" % [str(u.intent_move), ", hits %s" % t.label() if t != null else ""])
 	var m := s.map
+	if board.viewer != BoardView.PUBLIC and not Vision.tile_visible(s, board.viewer, cell):
+		parts.append("fog")
 	if m.is_cover(cell):
 		parts.append("cover")
 	elif m.is_fountain(cell):
@@ -217,10 +221,13 @@ func _advance_playback() -> void:
 		return
 	var idx: int = shown_phases[phase_i]
 	var ph: Dictionary = result.phases[idx]
-	var prev: MatchState = state if idx == 0 else result.phases[idx - 1]["state"]
-	board.state = ph["state"]
+	var prev := Vision.public_view(state if idx == 0 else result.phases[idx - 1]["state"])
+	var after := Vision.public_view(ph["state"])
+	var events := _public_events(ph["events"], prev, after)
+	board.viewer = BoardView.PUBLIC
+	board.state = after
 	board.prev_state = prev
-	board.phase_events = ph["events"]
+	board.phase_events = events
 	board.show_telegraphs = false
 	if _tween:
 		_tween.kill()
@@ -229,15 +236,15 @@ func _advance_playback() -> void:
 	_tween.tween_property(board, "anim_t", 1.0, PHASE_SECONDS)
 	phase_label.text = ph["label"]
 	phase_label.add_theme_color_override("font_color", Color(1, 0.9, 0.6))
-	var texts := _event_texts(ph["events"])
+	var texts := _event_texts(events)
 	phase_events.clear()
 	phase_events.append_text("[b]%s[/b]\n" % ph["label"])
 	phase_events.append_text("\n".join(texts) if not texts.is_empty() else "Minions advance.")
 	for t in texts:
 		_log(t)
 	next_button.text = "Next phase  (Space)" if phase_i < shown_phases.size() - 1 else "Finish turn  (Space)"
-	_update_header(ph["state"])
-	_update_cards(ph["state"])
+	_update_header(after)
+	_update_cards(after, BoardView.PUBLIC)
 
 
 ## Shows the board after the turn, with next turn's telegraphs, so both
@@ -247,7 +254,8 @@ func _review() -> void:
 	auto_button.visible = false
 	skip_button.visible = false
 	board.clear_overlays()
-	board.state = result.state
+	board.viewer = BoardView.PUBLIC
+	board.state = Vision.public_view(result.state)
 	board.show_telegraphs = true
 	board.queue_redraw()
 	phase_label.text = "Turn %d resolved" % state.turn
@@ -256,10 +264,10 @@ func _review() -> void:
 		phase_events.append_text("[b]Game over.[/b]")
 		next_button.text = "See result  (Space)"
 	else:
-		phase_events.append_text("[b]Turn %d resolved.[/b]\nThe board now shows next turn's minion and structure telegraphs." % state.turn)
+		phase_events.append_text("[b]Turn %d resolved.[/b]\nShowing only what each side's opponent can see, plus next turn's telegraphs." % state.turn)
 		next_button.text = "Plan turn %d  (Space)" % result.state.turn
-	_update_header(result.state)
-	_update_cards(result.state)
+	_update_header(board.state)
+	_update_cards(board.state, BoardView.PUBLIC)
 
 
 func _skip_playback() -> void:
@@ -275,6 +283,49 @@ func _on_auto_toggled(on: bool) -> void:
 		_auto_timer.start()
 	else:
 		_auto_timer.stop()
+
+
+## Rewrites a phase's events for the shared screen: anything involving a
+## unit its opponent can't see is hidden or reworded, so playback never leaks
+## positions. `before`/`after` are public views around the phase.
+func _public_events(events: Array, before: MatchState, after: MatchState) -> Array:
+	var seen := func(id) -> bool:
+		if id == null or id == -1:
+			return true
+		for v in [before, after]:
+			var u: Unit = v.unit_by_id(id)
+			if u != null and u.is_alive() and not Vision.is_hidden(u):
+				return true
+		return false
+	var name_of := func(id) -> String:
+		for v in [after, before]:
+			var u: Unit = v.unit_by_id(id)
+			if u != null:
+				return u.label()
+		return "Someone"
+	var out := []
+	for e in events:
+		var c: Dictionary = e.duplicate()
+		var actor_ok: bool = seen.call(e.get("unit", -1))
+		var target_ok: bool = seen.call(e.get("target", -1))
+		var always_public: bool = e["type"] in ["gold", "level", "respawn", "reveal", "death", "spawn", "game_over"]
+		if e["type"] == "hit":
+			if actor_ok and target_ok:
+				out.append(c)
+			elif target_ok:
+				c["text"] = "%s takes %d from an unseen attacker." % [name_of.call(e["target"]), e["amount"]]
+				out.append(c)
+			elif actor_ok:
+				c["text"] = "%s hits something in the fog." % name_of.call(e["unit"])
+				c["draw"] = false
+				out.append(c)
+		elif always_public:
+			if e["type"] == "death" and not actor_ok:
+				c["draw"] = false
+			out.append(c)
+		elif actor_ok and target_ok:
+			out.append(c)
+	return out
 
 
 func _event_texts(events: Array) -> PackedStringArray:
@@ -328,17 +379,22 @@ func _update_header(s: MatchState) -> void:
 	turn_label.text = t
 
 
-func _update_cards(s: MatchState) -> void:
-	west_info.text = _card(s, Rules.WEST)
-	east_info.text = _card(s, Rules.EAST)
+## `viewer` is the side whose view `s` is, or BoardView.PUBLIC.
+func _update_cards(s: MatchState, viewer: int) -> void:
+	west_info.text = _card(s, Rules.WEST, viewer)
+	east_info.text = _card(s, Rules.EAST, viewer)
 
 
-func _card(s: MatchState, side: int) -> String:
+func _card(s: MatchState, side: int, viewer: int) -> String:
 	var h := s.hero(side)
 	var col: String = (BoardView.SIDE_COLORS[side] as Color).lightened(0.35).to_html(false)
 	var lines: PackedStringArray = []
 	lines.append("[color=#%s][b]%s - %s[/b][/color]" % [col, Rules.SIDE_NAMES[side], h.display_name])
-	if h.is_alive():
+	if h.is_alive() and Vision.is_hidden(h):
+		var ls: Dictionary = s.last_seen[viewer] if viewer != BoardView.PUBLIC else {}
+		var when := "" if ls.is_empty() else " - last seen turn %d" % ls["turn"]
+		lines.append("[color=#8a90a0]In the fog%s[/color]" % when)
+	elif h.is_alive():
 		lines.append("HP [b]%d[/b] / %d" % [h.hp, h.max_hp])
 	else:
 		lines.append("[color=#e06060]Dead - back in %d[/color]" % h.respawn_timer)

@@ -23,8 +23,8 @@ const MINION_STATS := {
 const WAVE := [Unit.Kind.MELEE, Unit.Kind.MELEE, Unit.Kind.RANGED]
 
 # --- Structures (doc) --------------------------------------------------------
-const TOWER := {"name": "Tower", "hp": 30, "range": 2, "vs_minion": 2, "vs_hero": 4}
-const BASE := {"name": "Base", "hp": 30, "range": 2, "vs_minion": 1, "vs_hero": 2}   # vs_minion (assumed)
+const TOWER := {"name": "Tower", "hp": 15, "range": 2, "vs_minion": 2, "vs_hero": 4}   # hp: doc 30, lowered for testing
+const BASE := {"name": "Base", "hp": 15, "range": 2, "vs_minion": 1, "vs_hero": 2}   # vs_minion (assumed)
 const TOWER_LOSS_SHIELD := 10
 
 # --- Economy (doc) -----------------------------------------------------------
@@ -41,6 +41,13 @@ const LEVEL_XP := [0, 6, 14, 24, 34, 46]   # (assumed) total XP needed for level
 const MAX_LEVEL := 6
 const HP_PER_LEVEL := 2                    # (doc)
 const DAMAGE_UP_LEVELS := [3, 5]           # (doc) +1 Basic Attack damage
+
+# --- Vision (doc) --------------------------------------------------------------
+const VISION_HERO := 3
+const VISION_MINION := 2
+const VISION_STRUCTURE := 3
+const HIT_REVEAL_TURNS := 2     # rest of this turn + the next one ("revealed for one turn")
+const LAST_SEEN_FADE_TURNS := 4 # (assumed) how long a last-known marker lingers
 
 # --- Combat ------------------------------------------------------------------
 const AGGRO_RADIUS := 2                    # (doc)

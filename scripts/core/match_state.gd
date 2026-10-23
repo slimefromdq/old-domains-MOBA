@@ -14,6 +14,8 @@ var game_over := false
 var winner := -1        ## -1 with game_over = draw
 var structure_targets := {}    ## telegraph: structure id -> unit id (-1 = none)
 var structure_warnings := {}   ## telegraph: structure id -> could switch to a hero
+var reveal_zones: Array = []   ## [{"side", "center": Vector2i, "turns"}] from Area reveal
+var last_seen: Array = [{}, {}] ## [viewer] -> {"pos", "turn"}: where viewer last saw the enemy hero
 
 
 static func new_match(map_data: MapData, west_hero: String, east_hero: String) -> MatchState:
@@ -26,6 +28,7 @@ static func new_match(map_data: MapData, west_hero: String, east_hero: String) -
 		s.add_unit(Heroes.make(picks[side], side, map_data.fountains[side][0]))
 	s.spawn_wave()
 	MinionAI.update_telegraphs(s)
+	Vision.update_last_seen(s)
 	return s
 
 
@@ -43,6 +46,8 @@ func clone() -> MatchState:
 	s.winner = winner
 	s.structure_targets = structure_targets.duplicate()
 	s.structure_warnings = structure_warnings.duplicate()
+	s.reveal_zones = reveal_zones.duplicate(true)
+	s.last_seen = last_seen.duplicate(true)
 	return s
 
 

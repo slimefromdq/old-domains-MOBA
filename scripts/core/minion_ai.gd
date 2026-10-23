@@ -5,10 +5,16 @@ extends RefCounted
 ## so a telegraph only changes if the board changes (or aggro triggers).
 
 
+## Could `attacker` legally damage `t`? (Ignores vision: heroes may fire into fog.)
 static func can_target(s: MatchState, attacker: Unit, t: Unit) -> bool:
 	if t == null or not t.is_alive() or t.side == attacker.side:
 		return false
 	return not (t.kind == Unit.Kind.BASE and not s.base_targetable(t.side))
+
+
+## Minions and structures only pick targets their side can see.
+static func can_auto_target(s: MatchState, attacker: Unit, t: Unit, tiles: Dictionary) -> bool:
+	return can_target(s, attacker, t) and Vision.can_see_unit(s, attacker.side, t, tiles)
 
 
 ## Minions in processing order: West and East interleaved, oldest first.
@@ -39,8 +45,9 @@ static func aggro_ids(s: MatchState, m: Unit) -> Array:
 static func pick_target(s: MatchState, m: Unit, from: Vector2i, aggro: Array) -> Unit:
 	var best: Unit = null
 	var best_key := []
+	var tiles := Vision.visible_tiles(s, m.side)
 	for t in s.units:
-		if not can_target(s, m, t) or Rules.dist(from, t.pos) > m.attack_range:
+		if not can_auto_target(s, m, t, tiles) or Rules.dist(from, t.pos) > m.attack_range:
 			continue
 		var rank := 3
 		if aggro.has(t.id):
@@ -85,8 +92,9 @@ static func step_minion(s: MatchState, m: Unit, aggro: Array) -> Vector2i:
 static func structure_target(s: MatchState, st: Unit) -> Unit:
 	var best: Unit = null
 	var best_key := []
+	var tiles := Vision.visible_tiles(s, st.side)
 	for t in s.units:
-		if not can_target(s, st, t) or t.is_structure() or Rules.dist(st.pos, t.pos) > st.attack_range:
+		if not can_auto_target(s, st, t, tiles) or t.is_structure() or Rules.dist(st.pos, t.pos) > st.attack_range:
 			continue
 		var rank := 2
 		if t.is_hero() and t.hit_a_hero_this_turn() and Rules.dist(t.hit_hero_from, st.pos) <= st.attack_range:
@@ -123,7 +131,8 @@ static func update_telegraphs(s: MatchState) -> void:
 static func _enemy_hero_within(s: MatchState, u: Unit, radius: int) -> bool:
 	var e := s.hero(1 - u.side)
 	var ally := s.hero(u.side)
-	return e != null and e.is_alive() and ally != null and ally.is_alive() and Rules.dist(e.pos, u.pos) <= radius
+	return e != null and e.is_alive() and ally != null and ally.is_alive() and Rules.dist(e.pos, u.pos) <= radius \
+		and Vision.can_see_unit(s, u.side, e)
 
 
 static func distance_field(map: MapData, goal: Vector2i) -> Dictionary:

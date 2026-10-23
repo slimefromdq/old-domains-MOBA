@@ -291,7 +291,7 @@ func test_structures_take_half_from_heroes_and_base_is_protected() -> void:
 	var s := board("A", "D", Vector2i(8, 1), Vector2i(4, 2))
 	var tower := s.structure(Rules.EAST, Unit.Kind.TOWER)
 	var r := Resolver.resolve(s, orders(A.BASIC, [tower.pos]), idle())
-	eq(phase_state(r, "attack").unit_by_id(tower.id).hp, 30 - 1, "hero deals half (3 -> 1)")
+	eq(phase_state(r, "attack").unit_by_id(tower.id).hp, Rules.TOWER["hp"] - 1, "hero deals half (3 -> 1)")
 	s.hero(0).pos = Vector2i(11, 1)
 	var base_tile: Vector2i = s.map.bases[Rules.EAST]
 	eq(Legality.sanitize(s, s.hero(0), orders(A.BASIC, [base_tile])).action, A.NONE, "base can't be targeted while tower stands")
@@ -354,7 +354,7 @@ func test_xp_radius_and_levels() -> void:
 	eq(h.level, 3, "level 3 at 14 XP")
 	eq(h.max_hp, 18 + 4, "+2 HP per level")
 	eq(h.damage, 4, "+1 damage at level 3")
-	eq(Legality.unavailable_reason(h, A.ABILITY_2), "Needs fog", "ability 2 unlocked (Area reveal waits for fog)")
+	eq(Legality.unavailable_reason(h, A.ABILITY_2), "", "ability 2 unlocked")
 
 
 func test_kill_gold_bounty_and_respawn() -> void:
@@ -407,9 +407,104 @@ func test_hard_cap() -> void:
 	s.turn = Rules.HARD_CAP_TURN
 	var r := Resolver.resolve(s, idle(), idle())
 	check(r.state.game_over and r.state.winner == -1, "equal base HP is a draw")
-	s.structure(Rules.WEST, Unit.Kind.BASE).hp = 20
+	s.structure(Rules.WEST, Unit.Kind.BASE).hp = Rules.BASE["hp"] - 5
 	r = Resolver.resolve(s, idle(), idle())
 	check(r.state.game_over and r.state.winner == Rules.EAST, "higher base HP wins")
+
+
+# --- Fog of war ------------------------------------------------------------------
+
+func test_vision_radii() -> void:
+	var s := board("A", "D", Vector2i(4, 2), Vector2i(8, 2))
+	var tiles := Vision.visible_tiles(s, Rules.WEST)
+	check(tiles.has(Vector2i(7, 2)), "hero sees 3 tiles")
+	check(not tiles.has(Vector2i(8, 2)), "but not 4")
+	check(not Vision.can_see_unit(s, Rules.WEST, s.hero(1)), "D is in fog")
+	s.add_minion(Unit.Kind.MELEE, Rules.WEST, Vector2i(6, 2))
+	check(Vision.can_see_unit(s, Rules.WEST, s.hero(1)), "a minion sees 2 tiles")
+	check(Vision.visible_tiles(s, Rules.WEST).has(Vector2i(5, 1)), "tower sees 3 tiles")
+	check(Vision.can_see_unit(s, Rules.WEST, s.structure(Rules.EAST, Unit.Kind.TOWER)), "structures are always visible")
+
+
+func test_cover_hides_heroes() -> void:
+	var s := board("A", "D", Vector2i(1, 1), Vector2i(4, 1))
+	check(s.map.is_cover(Vector2i(4, 1)), "(4,1) is cover")
+	check(Vision.tile_visible(s, Rules.WEST, Vector2i(4, 1)), "the tile is in vision")
+	check(not Vision.can_see_unit(s, Rules.WEST, s.hero(1)), "but the hero in cover is hidden")
+	check(Vision.can_see_unit(s, Rules.EAST, s.hero(1)), "you always see yourself")
+	s.add_minion(Unit.Kind.MELEE, Rules.WEST, Vector2i(4, 2))
+	check(Vision.can_see_unit(s, Rules.WEST, s.hero(1)), "an adjacent enemy unit spots it")
+
+
+func test_hitting_a_hidden_hero_reveals_it_for_one_turn() -> void:
+	var s := board("A", "D", Vector2i(1, 1), Vector2i(4, 1))
+	var r := Resolver.resolve(s, orders(A.BASIC, [Vector2i(4, 1)]), idle())
+	eq(r.state.hero(1).hp, 26 - 3, "attacking an unseen tile is legal and lands")
+	check(Vision.can_see_unit(r.state, Rules.WEST, r.state.hero(1)), "revealed through the next turn")
+	eq(events_of(r, "reveal").size(), 1, "reveal event")
+	var r2 := Resolver.resolve(r.state, idle(), idle())
+	check(not Vision.can_see_unit(r2.state, Rules.WEST, r2.state.hero(1)), "hidden again after that")
+
+
+func test_auto_targeting_needs_vision() -> void:
+	var s := board("A", "D", Vector2i(1, 2), Vector2i(4, 1))
+	var m := s.add_minion(Unit.Kind.RANGED, Rules.WEST, Vector2i(4, 3))
+	eq(MinionAI.pick_target(s, m, m.pos, []), null, "ranged minion can't shoot a hero hidden in cover")
+	s.hero(1).pos = Vector2i(5, 2)
+	eq(MinionAI.pick_target(s, m, m.pos, []), s.hero(1), "out of cover it can")
+
+
+func test_planning_view_hides_enemies_and_moves_bump_into_them() -> void:
+	var s := board("A", "D", Vector2i(5, 2), Vector2i(4, 1))
+	var hidden_minion := s.add_minion(Unit.Kind.MELEE, Rules.EAST, Vector2i(11, 1))
+	var v := Vision.view_for(s, Rules.WEST)
+	check(Vision.is_hidden(v.hero(1)), "hidden hero is off the board in West's view")
+	eq(v.unit_by_id(hidden_minion.id), null, "hidden minion removed from West's view")
+	eq(v.hero(1).hp, s.hero(1).hp, "the hero record itself survives")
+	var opts := Legality.move_options(v, v.hero(0), v.hero(0).pos)
+	check(opts.has(Vector2i(4, 1)), "West can plan onto the tile it can't see is taken")
+	var r := Resolver.resolve(s, orders(A.NONE, [], [Vector2i(5, 1), Vector2i(4, 1)]), idle())
+	eq(r.state.hero(0).pos, Vector2i(5, 1), "the move stops short of the hidden hero")
+
+
+func test_area_reveal() -> void:
+	var s := board("A", "D", Vector2i(5, 2), Vector2i(8, 1))
+	set_level(s.hero(0), 3)
+	check(not Vision.can_see_unit(s, Rules.WEST, s.hero(1)), "D starts hidden")
+	var r := Resolver.resolve(s, orders(A.ABILITY_2, [Vector2i(8, 1)]), idle())
+	check(Vision.can_see_unit(r.state, Rules.WEST, r.state.hero(1)), "revealed, cover and all")
+	eq(r.state.hero(0).cooldowns["ability_2"], 3, "cooldown 4")
+	var r2 := Resolver.resolve(r.state, idle(), idle())
+	check(Vision.can_see_unit(r2.state, Rules.WEST, r2.state.hero(1)) == false and r2.state.reveal_zones.is_empty(),
+		"zone lasts this turn and the next")
+	var v := Vision.view_for(r.state, Rules.EAST)
+	check(v.reveal_zones.is_empty(), "East doesn't see West's reveal zone")
+
+
+func test_last_seen_marker() -> void:
+	var s := board("A", "D", Vector2i(5, 2), Vector2i(7, 2))
+	var r := Resolver.resolve(s, idle(), orders(A.NONE, [], [Vector2i(8, 2), Vector2i(9, 2)]))
+	check(not Vision.can_see_unit(r.state, Rules.WEST, r.state.hero(1)), "D walked into fog")
+	eq(r.state.last_seen[Rules.WEST].get("pos"), Vector2i(7, 2), "West remembers where D was")
+	var st := r.state
+	for i in Rules.LAST_SEEN_FADE_TURNS:
+		st = Resolver.resolve(st, idle(), idle()).state
+	check(st.last_seen[Rules.WEST].is_empty(), "the marker fades")
+
+
+func test_ult_only_hits_visible_tiles() -> void:
+	var s := board("A", "D", Vector2i(5, 2), Vector2i(11, 1))
+	set_level(s.hero(0), 5)
+	var opts := Legality.target_options(s, s.hero(0), A.ULT, s.hero(0).pos)
+	check(opts.has(Vector2i(7, 2)), "visible tile allowed")
+	check(not opts.has(Vector2i(11, 1)), "fogged tile not allowed")
+
+
+func test_public_view_shows_only_what_the_enemy_sees() -> void:
+	var s := board("A", "D", Vector2i(4, 1), Vector2i(6, 2))
+	var pub := Vision.public_view(s)
+	check(Vision.is_hidden(pub.hero(0)), "A in cover is hidden from East, so hidden on the shared screen")
+	eq(pub.hero(1).pos, Vector2i(6, 2), "D is seen by West, so shown")
 
 
 # --- The design doc's worked example ---------------------------------------------

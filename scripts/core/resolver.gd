@@ -44,9 +44,11 @@ static func resolve(state: MatchState, west: HeroOrders, east: HeroOrders) -> Re
 	for u in r.s.units:
 		if not u.is_alive():
 			r._dead[u.id] = true   # already dead (waiting to respawn)
+	# Orders are judged against what each player could see when planning.
+	var views := [Vision.view_for(r.s, Rules.WEST), Vision.view_for(r.s, Rules.EAST)]
 	r.orders = [
-		Legality.sanitize(r.s, r.s.hero(Rules.WEST), west),
-		Legality.sanitize(r.s, r.s.hero(Rules.EAST), east),
+		Legality.sanitize(views[0], views[0].hero(Rules.WEST), west),
+		Legality.sanitize(views[1], views[1].hero(Rules.EAST), east),
 	]
 	r._run()
 	r.result.state = r.s
@@ -78,6 +80,7 @@ func _run() -> void:
 
 
 func _end_phase() -> void:
+	Vision.update_last_seen(s)
 	result.phases.append({"key": _phase_key, "label": _phase_label, "state": s.clone(), "events": _phase_events})
 	result.events.append_array(_phase_events)
 
@@ -125,6 +128,9 @@ func _phase_guard() -> void:
 		if o.action == A.GUARD:
 			h.guarding = true
 			_event("status", "%s guards." % h.label(), {"unit": h.id})
+		elif o.action == A.ABILITY_2 and h.hero_id == "A":
+			s.reveal_zones.append({"side": side, "center": o.targets[0], "turns": _ability(h, o)["turns"]})
+			_event("status", "%s reveals an area." % h.label(), {"unit": h.id, "tile": o.targets[0]})
 		elif o.action == A.ULT and h.hero_id == "D":
 			var t := s.unit_at(o.targets[0])
 			if t != null and t.is_hero() and t.side != h.side and Rules.dist(t.pos, h.pos) == 1:
@@ -218,6 +224,9 @@ func _apply_hits(hits: Array) -> void:
 		var src: Unit = l[0]
 		var t: Unit = l[1]
 		var h: Dictionary = l[2]
+		if t.is_hero() and t.side != src.side and t.revealed <= 0 and not Vision.can_see_unit(s, src.side, t):
+			t.revealed = Rules.HIT_REVEAL_TURNS
+			_event("reveal", "A hidden %s is hit and revealed!" % t.label(), {"unit": t.id, "tile": t.pos})
 		if t.is_hero() and t.side != src.side:
 			src.hit_hero_from = src.pos
 		if t.is_minion():
@@ -343,7 +352,8 @@ func _phase_move() -> void:
 		walks[side] = walk
 	# Two moves ending on the same tile: both stop one tile short.
 	while walks.size() == 2 and walks[0].back() == walks[1].back() and walks[0].size() > 1:
-		_event("status", "Collision! Both heroes stop short.", {"unit": -1, "tile": walks[0].back()})
+		_event("status", "Collision! Both heroes stop short.",
+			{"unit": s.hero(0).id, "target": s.hero(1).id, "tile": walks[0].back()})
 		walks[0].pop_back()
 		walks[1].pop_back()
 	for side in walks:
@@ -515,7 +525,11 @@ func _phase_upkeep() -> void:
 				_event("move", "%s recalls to base." % h.label(), {"unit": h.id, "from": h.pos, "to": dest, "recall": true})
 				h.pos = dest
 	# Timers and per-turn statuses.
+	for z in s.reveal_zones:
+		z["turns"] -= 1
+	s.reveal_zones = s.reveal_zones.filter(func(z): return z["turns"] > 0)
 	for h in heroes:
+		h.revealed = maxi(0, h.revealed - 1)
 		for key in h.cooldowns:
 			h.cooldowns[key] = maxi(0, h.cooldowns[key] - 1)
 		if not h.follow_lock.is_empty():

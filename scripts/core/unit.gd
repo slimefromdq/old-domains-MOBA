@@ -33,6 +33,7 @@ var took_damage := false       # this turn
 var hit_hero_from := Vector2i(-1, -1)   # this turn: where it stood when it hit an enemy hero
 var tether := {}               # on the victim: {"by": id, "turns": n}
 var follow_lock := {}          # on Hero D: {"target": id, "turns": n}
+var revealed := 0              # > 0: visible to the enemy wherever it stands
 
 # --- Minions -----------------------------------------------------------------
 var intent_move := Vector2i(-1, -1)    # telegraph: tile it will move to

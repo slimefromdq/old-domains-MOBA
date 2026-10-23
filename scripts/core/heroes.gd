@@ -17,9 +17,10 @@ const DEFS := {
 			"ability_1": {"name": "Root shot", "phase": Phase.ATTACK, "range": 3, "cooldown": 3, "level": 1,
 				"damage": 2, "targets": 1, "text": "2 damage. A hero hit this turn can't Move."},
 			"ability_2": {"name": "Area reveal", "phase": Phase.GUARD, "range": ANY_RANGE, "cooldown": 4, "level": 3,
-				"targets": 1, "needs_fog": true, "text": "Reveals a 3x3 area for 2 turns. (Needs fog of war - next milestone.)"},
+				"targets": 1, "radius": 1, "turns": 2,
+				"text": "Reveals a 3x3 area, including cover, for this turn and the next."},
 			"ult": {"name": "Multi-target strike", "phase": Phase.POST_MOVE, "range": ANY_RANGE, "cooldown": 8, "level": 5,
-				"damage": 5, "targets": 3, "text": "Pick 3 tiles; each takes 5 damage after movement."},
+				"damage": 5, "targets": 3, "visible_only": true, "text": "Pick 3 visible tiles; each takes 5 damage after movement."},
 		},
 	},
 	"D": {
