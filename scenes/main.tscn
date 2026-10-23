@@ -1,15 +1,20 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/view/board_view.gd" id="2_board"]
+[ext_resource type="Script" path="res://scripts/view/order_panel.gd" id="3_orders"]
 
-[node name="Main" type="Node2D"]
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1_main")
 
-[node name="Background" type="CanvasLayer" parent="."]
-layer = -1
-
-[node name="Color" type="ColorRect" parent="Background"]
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -18,64 +23,200 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.07, 0.08, 0.1, 1)
 
-[node name="Board" type="Node2D" parent="."]
-position = Vector2(30, 30)
-script = ExtResource("2_board")
+[node name="TopBar" type="HBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 12.0
+offset_right = 1260.0
+offset_bottom = 48.0
 
-[node name="UI" type="CanvasLayer" parent="."]
-
-[node name="Panel" type="PanelContainer" parent="UI"]
-anchors_preset = 11
-anchor_left = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -540.0
-offset_top = 20.0
-offset_right = -20.0
-offset_bottom = -20.0
-grow_horizontal = 0
-grow_vertical = 2
-
-[node name="Margin" type="MarginContainer" parent="UI/Panel"]
+[node name="TurnLabel" type="Label" parent="TopBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 0)
 layout_mode = 2
-theme_override_constants/margin_left = 14
-theme_override_constants/margin_top = 14
-theme_override_constants/margin_right = 14
-theme_override_constants/margin_bottom = 14
+theme_override_font_sizes/font_size = 20
+text = "Turn 1 / 30"
 
-[node name="VBox" type="VBoxContainer" parent="UI/Panel/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 10
-
-[node name="TurnLabel" type="Label" parent="UI/Panel/Margin/VBox"]
+[node name="PhaseLabel" type="Label" parent="TopBar"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 24
-text = "Round 1"
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
+text = "Phase"
+horizontal_alignment = 1
 
-[node name="EndTurnButton" type="Button" parent="UI/Panel/Margin/VBox"]
+[node name="HoverLabel" type="Label" parent="TopBar"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 0)
 layout_mode = 2
-focus_mode = 0
-text = "End Turn  (Space)"
-
-[node name="InfoLabel" type="Label" parent="UI/Panel/Margin/VBox"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 150)
-layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.72, 0.76, 1)
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 2
 autowrap_mode = 3
 
-[node name="Log" type="RichTextLabel" parent="UI/Panel/Margin/VBox"]
+[node name="Board" type="Node2D" parent="."]
+unique_name_in_owner = true
+position = Vector2(120, 58)
+script = ExtResource("2_board")
+
+[node name="Bottom" type="HBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 392.0
+offset_right = 1260.0
+offset_bottom = 708.0
+theme_override_constants/separation = 10
+
+[node name="WestCard" type="PanelContainer" parent="Bottom"]
+custom_minimum_size = Vector2(215, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Bottom/WestCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="WestInfo" type="RichTextLabel" parent="Bottom/WestCard/Margin"]
+unique_name_in_owner = true
+layout_mode = 2
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+
+[node name="Center" type="PanelContainer" parent="Bottom"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Margin" type="MarginContainer" parent="Bottom/Center"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="Stack" type="VBoxContainer" parent="Bottom/Center/Margin"]
+layout_mode = 2
+
+[node name="OrderPanel" type="VBoxContainer" parent="Bottom/Center/Margin/Stack"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
+script = ExtResource("3_orders")
+
+[node name="Playback" type="VBoxContainer" parent="Bottom/Center/Margin/Stack"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PhaseEvents" type="RichTextLabel" parent="Bottom/Center/Margin/Stack/Playback"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+
+[node name="Buttons" type="HBoxContainer" parent="Bottom/Center/Margin/Stack/Playback"]
+layout_mode = 2
+
+[node name="NextButton" type="Button" parent="Bottom/Center/Margin/Stack/Playback/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+text = "Next phase  (Space)"
+
+[node name="AutoButton" type="Button" parent="Bottom/Center/Margin/Stack/Playback/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+text = "Auto"
+
+[node name="SkipButton" type="Button" parent="Bottom/Center/Margin/Stack/Playback/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+text = "Skip to end"
+
+[node name="EastCard" type="PanelContainer" parent="Bottom"]
+custom_minimum_size = Vector2(215, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Bottom/EastCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="EastInfo" type="RichTextLabel" parent="Bottom/EastCard/Margin"]
+unique_name_in_owner = true
+layout_mode = 2
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+
+[node name="LogCard" type="PanelContainer" parent="Bottom"]
+custom_minimum_size = Vector2(290, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Bottom/LogCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 6
+
+[node name="Log" type="RichTextLabel" parent="Bottom/LogCard/Margin"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/normal_font_size = 13
+theme_override_font_sizes/bold_font_size = 13
+bbcode_enabled = true
 scroll_following = true
 
-[node name="Help" type="Label" parent="UI/Panel/Margin/VBox"]
+[node name="Overlay" type="ColorRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.05, 0.06, 0.08, 1)
+
+[node name="Center" type="CenterContainer" parent="Overlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="Overlay/Center"]
+custom_minimum_size = Vector2(640, 0)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.6, 0.62, 0.66, 1)
-theme_override_font_sizes/font_size = 13
-text = "Click a hero to select. Click a blue tile to move, a red-outlined enemy to attack.
-Each hero: one move + one attack per turn. Tab: next hero. Esc / right-click: deselect.
-Hover anything to see its attack range."
+theme_override_constants/separation = 16
+
+[node name="OverlayTitle" type="Label" parent="Overlay/Center/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 34
+text = "Title"
+horizontal_alignment = 1
+
+[node name="OverlayText" type="Label" parent="Overlay/Center/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.77, 0.8, 1)
+text = "Text"
+horizontal_alignment = 1
 autowrap_mode = 3
+
+[node name="OverlayButtons" type="HBoxContainer" parent="Overlay/Center/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 16
