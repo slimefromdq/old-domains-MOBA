@@ -1,11 +1,17 @@
 extends Control
-## Hot-seat flow: pick heroes -> (pass device -> plan) x2 -> phase playback -> repeat.
+## Match flow. Vs AI: pick a hero -> plan -> playback -> repeat, with EnemyAI
+## playing East from East's own view. Hot-seat: pick heroes ->
+## (pass device -> plan) x2 -> playback -> review -> repeat.
 ## All rules come from Resolver; this script only moves between screens.
 
 enum Stage { PICK, PASS, PLAN, PLAYBACK, REVIEW, OVER }
 
 const PHASE_SECONDS := 0.7
-const AUTO_SECONDS := 1.4
+const AUTO_SECONDS := 1.2
+const AI_SIDE := Rules.EAST
+## Ignore Space this long after planning starts, so tapping through playback
+## can't end the next turn by accident.
+const PLAN_KEY_GRACE_MS := 400
 
 @onready var board: BoardView = %Board
 @onready var order_panel: OrderPanel = %OrderPanel
@@ -26,6 +32,8 @@ const AUTO_SECONDS := 1.4
 @onready var overlay_buttons: HBoxContainer = %OverlayButtons
 
 var stage := Stage.PICK
+var vs_ai := true
+var _plan_started_ms := 0
 var state: MatchState
 var picks := ["", ""]
 var planning_side := 0
@@ -49,7 +57,7 @@ func _ready() -> void:
 	_auto_timer.wait_time = AUTO_SECONDS
 	_auto_timer.timeout.connect(_advance_playback)
 	add_child(_auto_timer)
-	_start_pick()
+	_start_menu()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -59,18 +67,31 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_SPACE:
 			if stage == Stage.PLAYBACK or stage == Stage.REVIEW:
 				_advance_playback()
+			elif stage == Stage.PLAN and Time.get_ticks_msec() - _plan_started_ms > PLAN_KEY_GRACE_MS:
+				order_panel.lock_in()
 		KEY_ENTER, KEY_KP_ENTER:
 			if stage == Stage.PLAN:
 				order_panel.lock_in()
 		KEY_ESCAPE:
 			if stage == Stage.PLAN:
 				order_panel.cancel()
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6:
+			if stage == Stage.PLAN:
+				order_panel.press_action(event.keycode - KEY_1)
 
 
-# --- Hero pick -----------------------------------------------------------------------
+# --- Mode and hero pick ---------------------------------------------------------------
 
-func _start_pick() -> void:
+func _start_menu() -> void:
 	stage = Stage.PICK
+	_auto_timer.stop()
+	_show_overlay("Old Domains",
+		"A 1v1 lane MOBA played in simultaneous turns.\nYou plan one Move and one Action, then the turn plays out phase by phase.",
+		[["Play vs AI", _start_pick.bind(true)], ["Hot-seat (2 players)", _start_pick.bind(false)]], Color.WHITE)
+
+
+func _start_pick(ai: bool) -> void:
+	vs_ai = ai
 	picks = ["", ""]
 	_show_pick(Rules.WEST)
 
@@ -84,26 +105,34 @@ func _show_pick(side: int) -> void:
 	var buttons := []
 	for id in Heroes.PICKABLE:
 		buttons.append(["%s  (%s)" % [Heroes.DEFS[id]["name"], Heroes.DEFS[id]["blurb"]], _on_pick.bind(side, id)])
-	_show_overlay("%s: choose your hero" % Rules.SIDE_NAMES[side], "\n\n".join(lines), buttons,
-		BoardView.SIDE_COLORS[side])
+	var title := "Choose your hero (you play West)" if vs_ai else "%s: choose your hero" % Rules.SIDE_NAMES[side]
+	_show_overlay(title, "\n\n".join(lines), buttons, BoardView.SIDE_COLORS[side])
 
 
 func _on_pick(side: int, id: String) -> void:
 	picks[side] = id
-	if side == Rules.WEST:
+	if side == Rules.WEST and not vs_ai:
 		_show_pick(Rules.EAST)
-	else:
-		state = MatchState.new_match(MapData.create_default(), picks[0], picks[1])
-		log_view.clear()
-		_log("[b]West: %s  vs  East: %s[/b]" % [Heroes.DEFS[picks[0]]["name"], Heroes.DEFS[picks[1]]["name"]])
-		_begin_turn()
+		return
+	if vs_ai:
+		picks[AI_SIDE] = Heroes.PICKABLE.pick_random()
+	state = MatchState.new_match(MapData.create_default(), picks[0], picks[1])
+	log_view.clear()
+	_log("[b]West: %s  vs  East: %s%s[/b]" % [Heroes.DEFS[picks[0]]["name"], Heroes.DEFS[picks[1]]["name"],
+		" (AI)" if vs_ai else ""])
+	_begin_turn()
 
 
 # --- Planning ------------------------------------------------------------------------
 
 func _begin_turn() -> void:
 	locked = [null, null]
-	_show_pass(Rules.WEST)
+	if vs_ai:
+		# The AI commits first, from what East can see, so it never sees your orders.
+		locked[AI_SIDE] = EnemyAI.plan(Vision.view_for(state, AI_SIDE), AI_SIDE)
+		_start_planning(Rules.WEST)
+	else:
+		_show_pass(Rules.WEST)
 
 
 func _show_pass(side: int) -> void:
@@ -117,7 +146,9 @@ func _show_pass(side: int) -> void:
 
 func _start_planning(side: int) -> void:
 	overlay.visible = false
+	_auto_timer.stop()
 	stage = Stage.PLAN
+	_plan_started_ms = Time.get_ticks_msec()
 	planning_side = side
 	var view := Vision.view_for(state, side)
 	board.state = view
@@ -127,7 +158,7 @@ func _start_planning(side: int) -> void:
 	order_panel.visible = true
 	playback.visible = false
 	order_panel.begin(view, view.hero(side))
-	phase_label.text = "%s is planning" % Rules.SIDE_NAMES[side]
+	phase_label.text = "Your turn - plan a Move and an Action" if vs_ai else "%s is planning" % Rules.SIDE_NAMES[side]
 	phase_label.add_theme_color_override("font_color", BoardView.SIDE_COLORS[side].lightened(0.3))
 	_update_header(view)
 	_update_cards(view, side)
@@ -140,14 +171,14 @@ func _on_orders_changed() -> void:
 	board.target_tiles = order_panel.target_tiles()
 	board.planned = order_panel.orders
 	board.planner = order_panel.hero
-	board.queue_redraw()
+	board.refresh()
 
 
 func _on_locked_in(o: HeroOrders) -> void:
 	if stage != Stage.PLAN:
 		return
 	locked[planning_side] = o
-	if planning_side == Rules.WEST:
+	if planning_side == Rules.WEST and not vs_ai:
 		_show_pass(Rules.EAST)
 	else:
 		_resolve()
@@ -200,6 +231,10 @@ func _resolve() -> void:
 	skip_button.visible = true
 	board.clear_overlays()
 	phase_i = -1
+	if vs_ai:
+		auto_button.set_pressed_no_signal(true)
+	if auto_button.button_pressed:
+		_auto_timer.start()
 	_advance_playback()
 
 
@@ -217,14 +252,19 @@ func _advance_playback() -> void:
 		return
 	phase_i += 1
 	if phase_i >= shown_phases.size():
-		_review()
+		if vs_ai and not result.state.game_over:
+			# The planning view already shows next turn's telegraphs.
+			state = result.state
+			_begin_turn()
+		else:
+			_review()
 		return
 	var idx: int = shown_phases[phase_i]
 	var ph: Dictionary = result.phases[idx]
-	var prev := Vision.public_view(state if idx == 0 else result.phases[idx - 1]["state"])
-	var after := Vision.public_view(ph["state"])
+	var prev := _watch_view(state if idx == 0 else result.phases[idx - 1]["state"])
+	var after := _watch_view(ph["state"])
 	var events := _public_events(ph["events"], prev, after)
-	board.viewer = BoardView.PUBLIC
+	board.viewer = _watcher()
 	board.state = after
 	board.prev_state = prev
 	board.phase_events = events
@@ -242,9 +282,15 @@ func _advance_playback() -> void:
 	phase_events.append_text("\n".join(texts) if not texts.is_empty() else "Minions advance.")
 	for t in texts:
 		_log(t)
-	next_button.text = "Next phase  (Space)" if phase_i < shown_phases.size() - 1 else "Finish turn  (Space)"
+	var last := phase_i == shown_phases.size() - 1
+	if not last:
+		next_button.text = "Next phase  (Space)"
+	elif vs_ai and not result.state.game_over:
+		next_button.text = "Plan turn %d  (Space)" % result.state.turn
+	else:
+		next_button.text = "Finish turn  (Space)"
 	_update_header(after)
-	_update_cards(after, BoardView.PUBLIC)
+	_update_cards(after, _watcher())
 
 
 ## Shows the board after the turn, with next turn's telegraphs, so both
@@ -254,10 +300,10 @@ func _review() -> void:
 	auto_button.visible = false
 	skip_button.visible = false
 	board.clear_overlays()
-	board.viewer = BoardView.PUBLIC
-	board.state = Vision.public_view(result.state)
+	board.viewer = _watcher()
+	board.state = _watch_view(result.state)
 	board.show_telegraphs = true
-	board.queue_redraw()
+	board.refresh()
 	phase_label.text = "Turn %d resolved" % state.turn
 	phase_events.clear()
 	if result.state.game_over:
@@ -267,7 +313,7 @@ func _review() -> void:
 		phase_events.append_text("[b]Turn %d resolved.[/b]\nShowing only what each side's opponent can see, plus next turn's telegraphs." % state.turn)
 		next_button.text = "Plan turn %d  (Space)" % result.state.turn
 	_update_header(board.state)
-	_update_cards(board.state, BoardView.PUBLIC)
+	_update_cards(board.state, _watcher())
 
 
 func _skip_playback() -> void:
@@ -276,6 +322,15 @@ func _skip_playback() -> void:
 	if _tween:
 		_tween.kill()
 	board.anim_t = 1.0
+
+
+## Whose eyes playback uses: yours vs the AI, the shared view in hot-seat.
+func _watcher() -> int:
+	return Rules.WEST if vs_ai else BoardView.PUBLIC
+
+
+func _watch_view(s: MatchState) -> MatchState:
+	return Vision.view_for(s, Rules.WEST) if vs_ai else Vision.public_view(s)
 
 
 func _on_auto_toggled(on: bool) -> void:
@@ -342,9 +397,11 @@ func _show_game_over() -> void:
 	stage = Stage.OVER
 	var s := result.state
 	var title := "Draw!" if s.winner == -1 else "%s wins!" % Rules.SIDE_NAMES[s.winner]
+	if vs_ai and s.winner != -1:
+		title = "You win!" if s.winner == Rules.WEST else "The AI wins."
 	var col: Color = Color.WHITE if s.winner == -1 else BoardView.SIDE_COLORS[s.winner]
 	var summary := "Ended on turn %d.\n%s\n%s" % [s.turn, _hero_line(s, 0), _hero_line(s, 1)]
-	_show_overlay(title, summary, [["Play again", _start_pick]], col)
+	_show_overlay(title, summary, [["Play again", _start_menu]], col)
 
 
 func _hero_line(s: MatchState, side: int) -> String:

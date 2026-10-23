@@ -7,6 +7,8 @@ signal changed
 signal locked_in(orders: HeroOrders)
 
 const A := HeroOrders.Action
+## Button order; also the 1-6 hotkeys.
+const ACTIONS := [A.BASIC, A.ABILITY_1, A.ABILITY_2, A.ULT, A.GUARD, A.RECALL]
 enum Mode { MOVE, TARGET }
 
 var state: MatchState
@@ -32,7 +34,7 @@ func _ready() -> void:
 	grid.add_theme_constant_override("h_separation", 6)
 	grid.add_theme_constant_override("v_separation", 6)
 	add_child(grid)
-	for a in [A.BASIC, A.ABILITY_1, A.ABILITY_2, A.ULT, A.GUARD, A.RECALL]:
+	for a in ACTIONS:
 		var b := Button.new()
 		b.toggle_mode = true
 		b.focus_mode = Control.FOCUS_NONE
@@ -60,7 +62,7 @@ func _ready() -> void:
 	clear.pressed.connect(func(): begin(state, hero))
 	row.add_child(clear)
 	_lock = Button.new()
-	_lock.text = "Lock in  (Enter)"
+	_lock.text = "End turn  (Space)"
 	_lock.focus_mode = Control.FOCUS_NONE
 	_lock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lock.pressed.connect(lock_in)
@@ -73,6 +75,13 @@ func begin(s: MatchState, h: Unit) -> void:
 	orders = HeroOrders.new()
 	mode = Mode.MOVE
 	_refresh()
+
+
+## Hotkey: `i` is 0..5 for the 1..6 keys.
+func press_action(i: int) -> void:
+	if hero == null or not hero.is_alive() or i < 0 or i >= ACTIONS.size():
+		return
+	_on_action(ACTIONS[i])
 
 
 func lock_in() -> void:
@@ -112,6 +121,8 @@ func handle_cell(cell: Vector2i, button: int) -> void:
 	if button == MOUSE_BUTTON_RIGHT:
 		cancel()
 		return
+	if mode == Mode.MOVE and _try_click_attack(cell):
+		return
 	if mode == Mode.TARGET:
 		if target_tiles().has(cell):
 			if orders.targets.has(cell):
@@ -140,6 +151,27 @@ func handle_cell(cell: Vector2i, button: int) -> void:
 				mode = Mode.TARGET
 				break
 	_refresh()
+
+
+## Clicking a visible enemy you can hit picks Basic Attack on it, so you
+## don't have to press the button first. Returns true if it did.
+func _try_click_attack(cell: Vector2i) -> bool:
+	if orders.action != A.NONE and orders.action != A.BASIC:
+		return false
+	var u := state.unit_at(cell)
+	if u == null or u.side == hero.side or Vision.is_hidden(u):
+		return false
+	var had := orders.clone()
+	orders.action = A.BASIC
+	orders.delayed = _delayed_pref and hero.hero_id == "A"
+	orders.targets.clear()
+	if not Legality.target_options(state, hero, A.BASIC, _target_origin()).has(cell):
+		orders = had
+		return false
+	orders.targets.append(cell)
+	mode = Mode.MOVE
+	_refresh()
+	return true
 
 
 func cancel() -> void:
@@ -191,7 +223,7 @@ func _refresh() -> void:
 	_title.add_theme_color_override("font_color", BoardView.SIDE_COLORS[hero.side].lightened(0.35))
 	for a in _buttons:
 		var b: Button = _buttons[a]
-		var text := _action_name(a)
+		var text := "%d  %s" % [ACTIONS.find(a) + 1, _action_name(a)]
 		var why := Legality.unavailable_reason(hero, a)
 		b.text = text if why == "" else "%s - %s" % [text, why.replace("Level ", "L")]
 		b.disabled = why != ""
@@ -228,16 +260,16 @@ func _action_tooltip(a: HeroOrders.Action) -> String:
 
 func _summary_text() -> String:
 	if not hero.is_alive():
-		return "Dead - respawns in %d turn(s). Lock in to continue." % hero.respawn_timer
+		return "Dead - respawns in %d turn(s). End the turn to continue." % hero.respawn_timer
 	var lines: PackedStringArray = []
 	if not _move_allowed():
 		lines.append("Move: taken over by %s." % _action_name(orders.action) if hero.follow_lock.is_empty() else "Move: following your Follow-lock target.")
 	elif orders.move_path.is_empty():
-		lines.append("Move: staying put. Click a blue tile to move.")
+		lines.append("Move: staying put. Click a blue tile to move there.")
 	else:
 		lines.append("Move: %d tile(s) to %s." % [orders.move_path.size(), orders.move_path.back()])
 	if orders.action == A.NONE:
-		lines.append("Action: none.")
+		lines.append("Action: none. Click an enemy in range to attack it, or press 1-6.")
 	else:
 		var need := Legality.targets_needed(hero, orders.action)
 		var t := ""
@@ -246,5 +278,5 @@ func _summary_text() -> String:
 			if orders.targets.size() < need:
 				t += "  (pick %d more orange tile%s)" % [need - orders.targets.size(), "" if need - orders.targets.size() == 1 else "s"]
 		lines.append("Action: %s%s%s." % [_action_name(orders.action), " (delayed)" if orders.delayed else "", t])
-	lines.append("Right-click / Esc cancels.")
+	lines.append("Space ends the turn. Right-click / Esc cancels.")
 	return "\n".join(lines)
