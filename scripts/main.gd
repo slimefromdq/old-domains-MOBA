@@ -140,7 +140,7 @@ func _on_orders_changed() -> void:
 	board.target_tiles = order_panel.target_tiles()
 	board.planned = order_panel.orders
 	board.planner = order_panel.hero
-	board.queue_redraw()
+	board.refresh()
 
 
 func _on_locked_in(o: HeroOrders) -> void:
@@ -257,7 +257,7 @@ func _review() -> void:
 	board.viewer = BoardView.PUBLIC
 	board.state = Vision.public_view(result.state)
 	board.show_telegraphs = true
-	board.queue_redraw()
+	board.refresh()
 	phase_label.text = "Turn %d resolved" % state.turn
 	phase_events.clear()
 	if result.state.game_over:
