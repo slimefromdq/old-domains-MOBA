@@ -11,6 +11,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 script = ExtResource("1_main")
 
 [node name="Background" type="ColorRect" parent="."]
@@ -29,6 +30,7 @@ offset_left = 20.0
 offset_top = 12.0
 offset_right = 1260.0
 offset_bottom = 48.0
+mouse_filter = 2
 
 [node name="TurnLabel" type="Label" parent="TopBar"]
 unique_name_in_owner = true

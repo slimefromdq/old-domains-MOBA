@@ -611,3 +611,67 @@ func test_full_match_invariants() -> void:
 			turns += 1
 		check(s.game_over, "%s match ends (turn %d)" % [str(picks), s.turn])
 		check(s.turn <= Rules.HARD_CAP_TURN, "ends by the hard cap")
+
+
+# --- Enemy AI ------------------------------------------------------------------
+
+func ai(s: MatchState, side: int) -> HeroOrders:
+	return EnemyAI.plan(Vision.view_for(s, side), side)
+
+
+func test_ai_hits_a_visible_enemy_hero() -> void:
+	var s := board("A", "D", Vector2i(4, 2), Vector2i(6, 2))
+	var o := ai(s, 0)
+	check(o.action == A.ABILITY_1 or o.action == A.BASIC, "AI attacks (got action %d)" % o.action)
+	check(o.targets.size() == 1 and o.targets[0] == Vector2i(6, 2), "AI targets the enemy hero's tile")
+
+
+func test_ai_last_hits_before_chipping() -> void:
+	var s := board("D", "A", Vector2i(5, 2), Vector2i(12, 3))
+	s.add_minion(Unit.Kind.MELEE, 1, Vector2i(6, 2)).hp = 2
+	s.add_minion(Unit.Kind.MELEE, 1, Vector2i(5, 1)).hp = 4
+	var o := ai(s, 0)
+	eq(o.action, A.BASIC, "AI basic attacks a minion")
+	check(o.targets.size() == 1 and o.targets[0] == Vector2i(6, 2), "AI takes the last hit first")
+
+
+func test_ai_does_not_target_a_hidden_hero() -> void:
+	var s := board("A", "D", Vector2i(6, 2), Vector2i(8, 1))
+	check(Vision.is_hidden(Vision.view_for(s, 0).hero(1)), "setup: East hides in cover")
+	var o := ai(s, 0)
+	check(not o.targets.has(Vector2i(8, 1)), "AI doesn't shoot at what it can't see")
+
+
+func test_ai_recalls_when_low_and_alone() -> void:
+	var s := board("A", "D", Vector2i(7, 2), Vector2i(12, 1))
+	s.hero(0).hp = 3
+	eq(ai(s, 0).action, A.RECALL, "AI recalls at low HP with no enemy hero in sight")
+
+
+func test_ai_retreats_when_low_under_pressure() -> void:
+	var s := board("A", "D", Vector2i(7, 2), Vector2i(9, 2))
+	s.hero(0).hp = 6
+	var o := ai(s, 0)
+	var home: Vector2i = s.map.fountains[0][0]
+	check(not o.move_path.is_empty() and Rules.dist(o.move_path.back(), home) < Rules.dist(Vector2i(7, 2), home),
+		"AI walks towards its fountain")
+
+
+func test_ai_vs_ai_match_is_legal_and_finishes() -> void:
+	for picks in [["A", "D"], ["D", "A"], ["A", "A"], ["D", "D"]]:
+		var s := MatchState.new_match(MapData.create_default(), picks[0], picks[1])
+		var turns := 0
+		var legal := true
+		while not s.game_over and turns < 40:
+			var plans := []
+			for side in 2:
+				var v := Vision.view_for(s, side)
+				var o := EnemyAI.plan(v, side)
+				var again := Legality.sanitize(v, v.hero(side), o)
+				if again.action != o.action or again.targets != o.targets or again.move_path != o.move_path:
+					legal = false
+				plans.append(o)
+			s = Resolver.resolve(s, plans[0], plans[1]).state
+			turns += 1
+		check(legal, "%s: AI orders are already legal" % str(picks))
+		check(s.game_over, "%s: AI match ends (turn %d)" % [str(picks), s.turn])

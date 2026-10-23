@@ -87,7 +87,8 @@ var _board_root: Node3D
 var _ground: BoardOverlay
 var _fx: BoardOverlay
 var _hud: Control
-var _ghosts := {}   # side -> Node3D
+var _ghosts := {}   # side -> Node3D: where you last saw the enemy hero
+var _dest_ghosts := {}   # side -> Node3D: where your planned Move ends
 ## unit id -> {node, unit, rest, from, to, moving, dying}
 var _units := {}
 
@@ -102,6 +103,7 @@ var _fit_dist := 10.0
 func _ready() -> void:
 	clip_contents = true
 	focus_mode = Control.FOCUS_NONE
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	var container := SubViewportContainer.new()
 	container.stretch = true
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -245,6 +247,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 
 func _set_hover(c: Vector2i) -> void:
+	var clickable := move_tiles.has(c) or target_tiles.has(c) or (planner != null and c == planner.pos)
+	if not clickable and planner != null and state != null and c != NO_CELL:
+		var u := state.unit_at(c)
+		clickable = u != null and u.side != planner.side
+	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if clickable else Control.CURSOR_ARROW
 	if c != hover_cell:
 		hover_cell = c
 		cell_hovered.emit(c)
@@ -321,6 +328,7 @@ func _rebuild() -> void:
 		_fit_camera()
 	_sync_units()
 	_update_ghosts()
+	_update_destination_ghost()
 	_draw_ground()
 
 
@@ -389,6 +397,24 @@ func _update_ghosts() -> void:
 				on = true
 		if g != null:
 			g.visible = on
+
+
+## A translucent copy of your hero where its planned Move ends.
+func _update_destination_ghost() -> void:
+	var at := NO_CELL
+	if planner != null and planned != null and planner.is_alive() and not planned.move_path.is_empty():
+		at = planned.move_path.back()
+	for side in _dest_ghosts:
+		(_dest_ghosts[side] as Node3D).visible = false
+	if at == NO_CELL:
+		return
+	if not _dest_ghosts.has(planner.side):
+		var g := BoardModels.build_ghost(SIDE_COLORS[planner.side])
+		_world.add_child(g)
+		_dest_ghosts[planner.side] = g
+	var ghost: Node3D = _dest_ghosts[planner.side]
+	ghost.position = BoardModels.center(at)
+	ghost.visible = true
 
 
 func _animate(delta: float) -> void:
@@ -530,10 +556,25 @@ func _draw_planned() -> void:
 		g.crosshair(center(t), 22 * PX, DELAYED_COLOR if post else STRIKE_COLOR, 0.045)
 
 
-## Per-frame shapes: hover outline and hit / miss effects.
+## Per-frame shapes: your hero's ring, hover outline and path preview, and
+## hit / miss effects.
 func _draw_fx() -> void:
 	var f := _fx
 	f.clear()
+	if planner != null and planned != null and planner.is_alive():
+		var pulse := 0.5 + 0.5 * sin(_time * 4.0)
+		var col: Color = SIDE_COLORS[planner.side].lightened(0.45)
+		f.ring(center(planner.pos), 0.43 + 0.03 * pulse, Color(col, 0.55 + 0.4 * pulse), 0.045)
+		if move_tiles.has(hover_cell):
+			var prev := center(Legality.move_origin(planner, planned))
+			var path: Array = move_tiles[hover_cell]
+			for i in path.size():
+				var nxt := center(path[i])
+				if i == path.size() - 1:
+					f.arrow(prev, nxt, Color(1, 1, 1, 0.45), 0.04)
+				else:
+					f.line(prev, nxt, Color(1, 1, 1, 0.45), 0.04)
+				prev = nxt
 	if hover_cell != NO_CELL:
 		f.rect_outline(_tile_rect(hover_cell), Color(1, 1, 1, 0.6), 0.03)
 	if prev_state != null:
@@ -603,6 +644,9 @@ func _draw_hud() -> void:
 				_label_at(BoardModels.center(t), Vector2(0, 30), "after move", 11, DELAYED_COLOR)
 	if prev_state != null:
 		_phase_labels()
+	var hint := "Wheel: zoom   Middle-drag: orbit   Q / E: turn   R: reset view"
+	var font := ThemeDB.fallback_font
+	_hud.draw_string(font, Vector2(10, size.y - 10), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.4))
 
 
 func _unit_labels(u: Unit, at: Vector3, alpha: float) -> void:
