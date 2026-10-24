@@ -198,6 +198,7 @@ func test_collision_both_stop_short() -> void:
 
 func test_cannot_move_through_enemies() -> void:
 	var s := board("A", "D", Vector2i(4, 2), Vector2i(5, 2))
+	s.turn = 2   # normal speed; turn 1's boost could walk around the enemy
 	var opts := Legality.move_options(s, s.hero(0), s.hero(0).pos)
 	check(not opts.has(Vector2i(6, 2)), "no path through the enemy hero")
 	s.add_minion(Unit.Kind.MELEE, Rules.WEST, Vector2i(4, 1))
@@ -206,6 +207,63 @@ func test_cannot_move_through_enemies() -> void:
 	s.hero(1).pos = Vector2i(9, 2)
 	opts = Legality.move_options(s, s.hero(0), s.hero(0).pos)
 	check(opts.has(Vector2i(5, 1)), "can walk through an allied minion")
+
+
+func test_first_turn_speed_boost() -> void:
+	var s := MatchState.new_match(MapData.create_default(), "A", "D")
+	var h := s.hero(0)
+	var far := 0
+	for c in Legality.move_options(s, h, h.pos):
+		far = maxi(far, Rules.dist(h.pos, c))
+	eq(far, h.speed + Rules.FIRST_TURN_SPEED_BONUS, "turn 1: heroes move further")
+	var m := s.unit_at(Vector2i(1, 1))   # a West melee minion with a clear lane ahead
+	var start := m.pos
+	var r := Resolver.resolve(s, idle(), idle())
+	var after := r.state.unit_by_id(m.id)
+	eq(Rules.dist(start, after.pos), Rules.MINION_SPEED + Rules.FIRST_TURN_SPEED_BONUS, "turn 1: minions move further")
+	var s2 := r.state
+	h = s2.hero(0)
+	far = 0
+	for c in Legality.move_options(s2, h, h.pos):
+		far = maxi(far, Rules.dist(h.pos, c))
+	eq(far, h.speed, "turn 2: back to normal speed")
+
+
+func test_no_minion_stays_stuck_behind_its_tower() -> void:
+	var s := MatchState.new_match(MapData.create_default(), "A", "D")
+	var ids := []
+	for u in s.units:
+		if u.is_minion():
+			ids.append(u.id)
+	for i in 3:
+		s = Resolver.resolve(s, idle(), idle()).state
+	for id in ids:
+		var m := s.unit_by_id(id)
+		if m != null and m.is_alive():
+			check(m.pos.x >= 2 and m.pos.x <= 10, "first-wave minion %d left its spawn (at %s)" % [id, m.pos])
+
+
+func test_waves_get_stronger() -> void:
+	var s := MatchState.new_match(MapData.create_default(), "A", "D")
+	var first: Unit = s.units.filter(func(u): return u.is_minion())[0]
+	eq(first.damage, 1, "wave 1: base damage")
+	eq(first.structure_damage, 1, "wave 1: base structure damage")
+	s.spawn_wave()   # wave 2
+	var w3 := s.spawn_wave()   # wave 3
+	var melee: Unit = w3.filter(func(u): return u.kind == Unit.Kind.MELEE)[0]
+	eq(melee.damage, 2, "wave 3: +1 damage")
+	eq(melee.structure_damage, 2, "wave 3: +1 structure damage")
+	eq(s.clone().waves_spawned, 3, "wave count survives cloning")
+
+
+func test_minions_spread_around_the_tower() -> void:
+	var s := board("A", "D", Vector2i(4, 2), Vector2i(12, 1))
+	var tower := s.structure(Rules.EAST, Unit.Kind.TOWER)
+	var a := s.add_minion(Unit.Kind.MELEE, Rules.WEST, tower.pos + Vector2i(-1, 0))
+	var b := s.add_minion(Unit.Kind.MELEE, Rules.WEST, tower.pos + Vector2i(-2, -1))
+	var step := MinionAI.step_minion(s, b, [])
+	eq(Rules.dist(step, tower.pos), 1, "the second minion walks to a free tile next to the Tower instead of queueing")
+	check(step != a.pos, "and not onto its wavemate")
 
 
 func test_delayed_shot_hits_the_tile_moved_to() -> void:
@@ -390,7 +448,14 @@ func test_recall() -> void:
 	check(s.map.is_fountain(r.state.hero(0).pos), "recalled to the fountain")
 	s.hero(1).pos = Vector2i(6, 2)
 	r = Resolver.resolve(s, orders(A.RECALL), orders(A.BASIC, [Vector2i(5, 2)]))
-	eq(r.state.hero(0).pos, Vector2i(5, 2), "damage interrupts recall")
+	eq(r.state.hero(0).pos, Vector2i(5, 2), "enemy hero damage interrupts recall")
+	# Minion damage doesn't.
+	s = board("A", "D", Vector2i(5, 2), Vector2i(12, 1))
+	s.add_minion(Unit.Kind.MELEE, Rules.EAST, Vector2i(6, 2))
+	MinionAI.update_telegraphs(s)
+	r = Resolver.resolve(s, orders(A.RECALL), idle())
+	check(r.state.hero(0).hp < s.hero(0).hp, "the minion hit the recalling hero")
+	check(s.map.is_fountain(r.state.hero(0).pos), "minion damage doesn't interrupt recall")
 
 
 func test_sudden_death() -> void:

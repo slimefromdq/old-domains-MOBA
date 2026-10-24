@@ -43,6 +43,15 @@ func is_walkable(c: Vector2i) -> bool:
 	return tile(c) != "#"
 
 
+func walkable_tiles() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for y in height:
+		for x in width:
+			if is_walkable(Vector2i(x, y)):
+				out.append(Vector2i(x, y))
+	return out
+
+
 func is_cover(c: Vector2i) -> bool:
 	return tile(c) == "c"
 

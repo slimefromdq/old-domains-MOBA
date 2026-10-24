@@ -15,17 +15,21 @@ const PLAN_KEY_GRACE_MS := 400
 
 @onready var board: BoardView = %Board
 @onready var order_panel: OrderPanel = %OrderPanel
-@onready var playback: VBoxContainer = %Playback
+@onready var playback: HBoxContainer = %Playback
 @onready var phase_events: RichTextLabel = %PhaseEvents
 @onready var next_button: Button = %NextButton
 @onready var auto_button: Button = %AutoButton
 @onready var skip_button: Button = %SkipButton
-@onready var turn_label: Label = %TurnLabel
-@onready var phase_label: Label = %PhaseLabel
+@onready var phase_bar: PhaseBar = %PhaseBar
+@onready var status_label: Label = %StatusLabel
 @onready var hover_label: Label = %HoverLabel
-@onready var west_info: RichTextLabel = %WestInfo
-@onready var east_info: RichTextLabel = %EastInfo
+@onready var chips: Array[PanelContainer] = [%WestChip, %EastChip]
+@onready var chip_texts: Array[RichTextLabel] = [%WestChipText, %EastChipText]
+@onready var detail: PanelContainer = %Detail
+@onready var detail_text: RichTextLabel = %DetailText
 @onready var log_view: RichTextLabel = %Log
+@onready var log_card: PanelContainer = %LogCard
+@onready var log_button: Button = %LogButton
 @onready var overlay: ColorRect = %Overlay
 @onready var overlay_title: Label = %OverlayTitle
 @onready var overlay_text: Label = %OverlayText
@@ -43,6 +47,9 @@ var shown_phases: Array = []
 var phase_i := -1
 var _auto_timer: Timer
 var _tween: Tween
+## Full hero cards, shown in the Detail popup when you hover a hero or its chip.
+var _cards := ["", ""]
+var _detail_side := -1
 
 
 func _ready() -> void:
@@ -57,6 +64,15 @@ func _ready() -> void:
 	_auto_timer.wait_time = AUTO_SECONDS
 	_auto_timer.timeout.connect(_advance_playback)
 	add_child(_auto_timer)
+	for side in 2:
+		chips[side].mouse_entered.connect(_show_detail.bind(side))
+		chips[side].mouse_exited.connect(_show_detail.bind(-1))
+		chips[side].add_theme_stylebox_override("panel", _panel_style(BoardView.SIDE_COLORS[side]))
+		chips[side].tooltip_text = ""
+	detail.add_theme_stylebox_override("panel", _panel_style(Color(0.5, 0.55, 0.65), 0.94))
+	log_button.toggled.connect(func(on): log_card.visible = on)
+	for p in [%BottomBar, log_card]:
+		(p as PanelContainer).add_theme_stylebox_override("panel", _panel_style(Color(0.4, 0.45, 0.55), 0.82))
 	_start_menu()
 
 
@@ -78,6 +94,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6:
 			if stage == Stage.PLAN:
 				order_panel.press_action(event.keycode - KEY_1)
+		KEY_L:
+			log_button.button_pressed = not log_button.button_pressed
+		KEY_0:
+			if stage == Stage.PLAN:
+				order_panel.press_action(OrderPanel.ACTIONS.find(HeroOrders.Action.NONE))
 
 
 # --- Mode and hero pick ---------------------------------------------------------------
@@ -158,8 +179,7 @@ func _start_planning(side: int) -> void:
 	order_panel.visible = true
 	playback.visible = false
 	order_panel.begin(view, view.hero(side))
-	phase_label.text = "Your turn - plan a Move and an Action" if vs_ai else "%s is planning" % Rules.SIDE_NAMES[side]
-	phase_label.add_theme_color_override("font_color", BoardView.SIDE_COLORS[side].lightened(0.3))
+	phase_bar.show_plan(order_panel.my_phases(), BoardView.SIDE_COLORS[side])
 	_update_header(view)
 	_update_cards(view, side)
 
@@ -172,6 +192,7 @@ func _on_orders_changed() -> void:
 	board.planned = order_panel.orders
 	board.planner = order_panel.hero
 	board.refresh()
+	phase_bar.show_plan(order_panel.my_phases(), BoardView.SIDE_COLORS[planning_side])
 
 
 func _on_locked_in(o: HeroOrders) -> void:
@@ -192,6 +213,7 @@ func _on_cell_clicked(cell: Vector2i, button: int) -> void:
 func _on_cell_hovered(cell: Vector2i) -> void:
 	if board.state == null or cell == BoardView.NO_CELL:
 		hover_label.text = ""
+		_show_detail(-1)
 		return
 	var s := board.state
 	var parts: PackedStringArray = []
@@ -212,6 +234,7 @@ func _on_cell_hovered(cell: Vector2i) -> void:
 		parts.append("objective pocket")
 	parts.append(str(cell))
 	hover_label.text = "  ".join(parts)
+	_show_detail(u.side if u != null and u.is_hero() and not Vision.is_hidden(u) else -1)
 
 
 # --- Playback ------------------------------------------------------------------------
@@ -274,8 +297,7 @@ func _advance_playback() -> void:
 	board.anim_t = 0.0
 	_tween = create_tween()
 	_tween.tween_property(board, "anim_t", 1.0, PHASE_SECONDS)
-	phase_label.text = ph["label"]
-	phase_label.add_theme_color_override("font_color", Color(1, 0.9, 0.6))
+	phase_bar.show_phase(ph["key"])
 	var texts := _event_texts(events)
 	phase_events.clear()
 	phase_events.append_text("[b]%s[/b]\n" % ph["label"])
@@ -304,7 +326,7 @@ func _review() -> void:
 	board.state = _watch_view(result.state)
 	board.show_telegraphs = true
 	board.refresh()
-	phase_label.text = "Turn %d resolved" % state.turn
+	phase_bar.clear()
 	phase_events.clear()
 	if result.state.game_over:
 		phase_events.append_text("[b]Game over.[/b]")
@@ -429,17 +451,64 @@ func _show_overlay(title: String, text: String, buttons: Array, color: Color) ->
 func _update_header(s: MatchState) -> void:
 	var t := "Turn %d / %d" % [s.turn, Rules.HARD_CAP_TURN]
 	if s.turn >= Rules.SUDDEN_DEATH_TURN:
-		t += "  SUDDEN DEATH +%d" % s.minion_damage_bonus()
+		t += "   ·   SUDDEN DEATH +%d" % s.minion_damage_bonus()
 	else:
 		var next_wave := s.turn + (Rules.WAVE_INTERVAL - (s.turn - 1) % Rules.WAVE_INTERVAL) % Rules.WAVE_INTERVAL
-		t += "   next wave: turn %d" % (next_wave if next_wave != s.turn else s.turn + Rules.WAVE_INTERVAL)
-	turn_label.text = t
+		t += "   ·   next wave: turn %d" % (next_wave if next_wave != s.turn else s.turn + Rules.WAVE_INTERVAL)
+	if stage == Stage.PLAN and not vs_ai:
+		t = "%s plans   ·   %s" % [Rules.SIDE_NAMES[planning_side], t]
+	status_label.text = t
 
 
 ## `viewer` is the side whose view `s` is, or BoardView.PUBLIC.
 func _update_cards(s: MatchState, viewer: int) -> void:
-	west_info.text = _card(s, Rules.WEST, viewer)
-	east_info.text = _card(s, Rules.EAST, viewer)
+	for side in 2:
+		_cards[side] = _card(s, side, viewer)
+		chip_texts[side].text = _chip(s, side)
+	_show_detail(_detail_side)
+
+
+## One or two short lines for the top-corner chip: the essentials at a glance.
+func _chip(s: MatchState, side: int) -> String:
+	var h := s.hero(side)
+	var col: String = (BoardView.SIDE_COLORS[side] as Color).lightened(0.4).to_html(false)
+	var hp := "dead, back in %d" % h.respawn_timer if not h.is_alive() else ("in fog" if Vision.is_hidden(h) else "%d/%d HP" % [h.hp, h.max_hp])
+	var tower := s.structure(side, Unit.Kind.TOWER)
+	var base := s.structure(side, Unit.Kind.BASE)
+	return "[color=#%s][b]%s[/b][/color]  L%d  %s\n[color=#9aa0aa]Tower %s  Base %s  ·  %dg[/color]" % [
+		col, h.display_name, h.level, hp, str(tower.hp) if tower else "down", str(base.hp) if base else "down", h.gold]
+
+
+## Shows the full card for `side` under its chip, or hides it for -1.
+func _show_detail(side: int) -> void:
+	_detail_side = side
+	if side < 0 or _cards[side] == "":
+		detail.visible = false
+		return
+	detail_text.text = _cards[side]
+	detail.visible = true
+	detail.size = Vector2.ZERO
+	_place_detail.call_deferred(side)
+
+
+func _place_detail(side: int) -> void:
+	detail.size = detail.get_combined_minimum_size()
+	var chip := chips[side]
+	var x := chip.global_position.x if side == Rules.WEST else chip.global_position.x + chip.size.x - detail.size.x
+	detail.position = Vector2(x, chip.global_position.y + chip.size.y + 4)
+
+
+func _panel_style(edge: Color, alpha := 0.78) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.06, 0.07, 0.09, alpha)
+	sb.border_color = Color(edge, 0.55)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 8
+	sb.content_margin_right = 8
+	sb.content_margin_top = 4
+	sb.content_margin_bottom = 4
+	return sb
 
 
 func _card(s: MatchState, side: int, viewer: int) -> String:

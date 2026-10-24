@@ -261,8 +261,6 @@ func _damage(src: Unit, t: Unit, amount: int, what: String) -> int:
 		absorbed = mini(dmg, s.base_shield[t.side])
 		s.base_shield[t.side] -= absorbed
 	t.hp = maxi(0, t.hp - (dmg - absorbed))
-	if dmg > 0:
-		t.took_damage = true
 	if t.is_hero() and src.is_hero() and src.side != t.side and dmg > 0:
 		_hit_by_enemy_hero[t.id] = true
 	var note := " (shield absorbs %d)" % absorbed if absorbed > 0 else ""
@@ -447,7 +445,7 @@ func _phase_minions() -> void:
 		var m: Unit = a[0]
 		var t: Unit = a[1]
 		var stats: Dictionary = Rules.MINION_STATS[m.kind]
-		var amount: int = (stats["structure_damage"] if t.is_structure() else stats["damage"]) + s.minion_damage_bonus()
+		var amount: int = (m.structure_damage if t.is_structure() else m.damage) + s.minion_damage_bonus()
 		_damage(m, t, amount, "attack")
 	_resolve_deaths()
 
@@ -518,8 +516,9 @@ func _phase_upkeep() -> void:
 	for side in 2:
 		var h: Unit = heroes[side]
 		if h.is_alive() and orders[side].action == A.RECALL:
-			if h.took_damage:
-				_event("status", "%s's Recall is interrupted." % h.label(), {"unit": h.id})
+			# Only the enemy hero can interrupt a Recall; minion and Tower hits don't.
+			if _hit_by_enemy_hero.has(h.id):
+				_event("status", "%s's Recall is interrupted by the enemy hero." % h.label(), {"unit": h.id})
 			else:
 				var dest := s.fountain_tile(side)
 				_event("move", "%s recalls to base." % h.label(), {"unit": h.id, "from": h.pos, "to": dest, "recall": true})
@@ -539,7 +538,6 @@ func _phase_upkeep() -> void:
 		h.guarding = false
 		h.rooted = false
 		h.displaced = false
-		h.took_damage = false
 		h.hit_hero_from = NO_TILE
 		if not h.is_alive() and h.died_turn < s.turn:
 			h.respawn_timer -= 1
@@ -561,8 +559,13 @@ func _phase_upkeep() -> void:
 	# Next turn.
 	s.turn += 1
 	if (s.turn - 1) % Rules.WAVE_INTERVAL == 0:
+		var bonus := s.wave_damage_bonus()
 		var wave := s.spawn_wave()
-		var note := " (sudden death: +%d minion damage)" % s.minion_damage_bonus() if s.minion_damage_bonus() > 0 else ""
+		var note := ""
+		if bonus > 0:
+			note += " (wave %d: +%d damage)" % [s.waves_spawned, bonus]
+		if s.minion_damage_bonus() > 0:
+			note += " (sudden death: +%d minion damage)" % s.minion_damage_bonus()
 		_event("spawn", "Minion waves spawn%s." % note, {"unit": -1, "count": wave.size()})
 	if s.turn == Rules.SUDDEN_DEATH_TURN:
 		_event("status", "Sudden death begins!", {"unit": -1})

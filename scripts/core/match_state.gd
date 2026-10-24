@@ -10,6 +10,7 @@ var next_id := 1
 var base_shield := [0, 0]
 var pending_siege := [0, 0]
 var sudden_death_waves := 0
+var waves_spawned := 0
 var game_over := false
 var winner := -1        ## -1 with game_over = draw
 var structure_targets := {}    ## telegraph: structure id -> unit id (-1 = none)
@@ -42,6 +43,7 @@ func clone() -> MatchState:
 	s.base_shield = base_shield.duplicate()
 	s.pending_siege = pending_siege.duplicate()
 	s.sudden_death_waves = sudden_death_waves
+	s.waves_spawned = waves_spawned
 	s.game_over = game_over
 	s.winner = winner
 	s.structure_targets = structure_targets.duplicate()
@@ -159,6 +161,7 @@ func add_minion(kind: Unit.Kind, side: int, at: Vector2i) -> Unit:
 	u.damage = stats["damage"]
 	u.attack_range = stats["range"]
 	u.speed = Rules.MINION_SPEED
+	u.structure_damage = stats["structure_damage"]
 	return add_unit(u)
 
 
@@ -178,5 +181,19 @@ func spawn_wave() -> Array[Unit]:
 		for k in kinds:
 			var at := nearest_free(map.spawns[side])
 			if at != Vector2i(-1, -1):
-				spawned.append(add_minion(k, side, at))
+				var m := add_minion(k, side, at)
+				m.damage += wave_damage_bonus()
+				m.structure_damage += wave_structure_bonus()
+				spawned.append(m)
+	waves_spawned += 1
 	return spawned
+
+
+## Extra damage to units for minions in the wave about to spawn.
+func wave_damage_bonus() -> int:
+	return waves_spawned / Rules.WAVE_DAMAGE_EVERY
+
+
+## Extra structure damage for minions in the wave about to spawn.
+func wave_structure_bonus() -> int:
+	return waves_spawned / Rules.WAVE_STRUCTURE_DAMAGE_EVERY
