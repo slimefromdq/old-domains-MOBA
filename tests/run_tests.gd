@@ -229,6 +229,20 @@ func test_first_turn_speed_boost() -> void:
 	eq(far, h.speed, "turn 2: back to normal speed")
 
 
+func test_no_minion_stays_stuck_behind_its_tower() -> void:
+	var s := MatchState.new_match(MapData.create_default(), "A", "D")
+	var ids := []
+	for u in s.units:
+		if u.is_minion():
+			ids.append(u.id)
+	for i in 3:
+		s = Resolver.resolve(s, idle(), idle()).state
+	for id in ids:
+		var m := s.unit_by_id(id)
+		if m != null and m.is_alive():
+			check(m.pos.x >= 3 and m.pos.x <= 9, "first-wave minion %d left its spawn (at %s)" % [id, m.pos])
+
+
 func test_delayed_shot_hits_the_tile_moved_to() -> void:
 	var s := board("A", "D", Vector2i(3, 2), Vector2i(6, 2))
 	var w := orders(A.BASIC, [Vector2i(7, 2)], [Vector2i(4, 2)], true)
