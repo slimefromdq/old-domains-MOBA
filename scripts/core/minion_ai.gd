@@ -66,7 +66,13 @@ static func pick_target(s: MatchState, m: Unit, from: Vector2i, aggro: Array) ->
 ## Walks up to `speed` tiles toward the enemy Base, stopping as soon as
 ## anything is in range. Only ever steps closer, so it never oscillates.
 static func step_minion(s: MatchState, m: Unit, aggro: Array) -> Vector2i:
-	var field := distance_field(s.map, s.map.bases[1 - m.side])
+	# Structures never move, so route around them. Otherwise the minion that
+	# spawns right behind its own Tower waits there forever.
+	var blocked := {}
+	for u in s.units:
+		if u.is_structure() and u.is_alive():
+			blocked[u.pos] = true
+	var field := distance_field(s.map, s.map.bases[1 - m.side], blocked)
 	var pos := m.pos
 	for i in m.speed:
 		if pick_target(s, m, pos, aggro) != null:
@@ -135,14 +141,15 @@ static func _enemy_hero_within(s: MatchState, u: Unit, radius: int) -> bool:
 		and Vision.can_see_unit(s, u.side, e)
 
 
-static func distance_field(map: MapData, goal: Vector2i) -> Dictionary:
+## Steps from every tile to `goal`, never passing through `blocked` tiles.
+static func distance_field(map: MapData, goal: Vector2i, blocked := {}) -> Dictionary:
 	var dist := {goal: 0}
 	var frontier: Array[Vector2i] = [goal]
 	while not frontier.is_empty():
 		var c: Vector2i = frontier.pop_front()
 		for d in Rules.dirs_for(0):
 			var n: Vector2i = c + d
-			if not dist.has(n) and map.is_walkable(n):
+			if not dist.has(n) and map.is_walkable(n) and not blocked.has(n):
 				dist[n] = dist[c] + 1
 				frontier.append(n)
 	return dist
