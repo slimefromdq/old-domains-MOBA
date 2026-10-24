@@ -12,12 +12,13 @@ const A := HeroOrders.Action
 ## not stood on. `from` differs from hero.pos when planning after a dash.
 static func move_options(s: MatchState, hero: Unit, from: Vector2i) -> Dictionary:
 	var result := {}
+	var speed := Rules.move_speed(s, hero)
 	var paths := {from: []}
 	var frontier: Array[Vector2i] = [from]
 	while not frontier.is_empty():
 		var c: Vector2i = frontier.pop_front()
 		var path: Array = paths[c]
-		if path.size() >= hero.speed:
+		if path.size() >= speed:
 			continue
 		for d in Rules.dirs_for(hero.side):
 			var n: Vector2i = c + d
@@ -178,7 +179,7 @@ static func sanitize(s: MatchState, hero: Unit, orders: HeroOrders) -> HeroOrder
 
 ## The player's own path is kept if it is a valid step-by-step walk.
 static func _same_path(_reference: Array, path: Array[Vector2i], origin: Vector2i, s: MatchState, hero: Unit) -> bool:
-	if path.size() > hero.speed:
+	if path.size() > Rules.move_speed(s, hero):
 		return false
 	var prev := origin
 	for i in path.size():

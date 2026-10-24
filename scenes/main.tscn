@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/view/board_view.gd" id="2_board"]
 [ext_resource type="Script" path="res://scripts/view/order_panel.gd" id="3_orders"]
+[ext_resource type="Script" path="res://scripts/view/phase_bar.gd" id="4_phases"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -24,158 +25,239 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.07, 0.08, 0.1, 1)
 
-[node name="TopBar" type="HBoxContainer" parent="."]
-layout_mode = 0
-offset_left = 20.0
-offset_top = 12.0
-offset_right = 1260.0
-offset_bottom = 48.0
-mouse_filter = 2
-
-[node name="TurnLabel" type="Label" parent="TopBar"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(260, 0)
-layout_mode = 2
-theme_override_font_sizes/font_size = 20
-text = "Turn 1 / 30"
-
-[node name="PhaseLabel" type="Label" parent="TopBar"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 22
-text = "Phase"
-horizontal_alignment = 1
-
-[node name="HoverLabel" type="Label" parent="TopBar"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(260, 0)
-layout_mode = 2
-theme_override_colors/font_color = Color(0.7, 0.72, 0.76, 1)
-theme_override_font_sizes/font_size = 13
-horizontal_alignment = 2
-autowrap_mode = 3
-
 [node name="Board" type="Control" parent="."]
 unique_name_in_owner = true
-layout_mode = 0
-offset_left = 20.0
-offset_top = 52.0
-offset_right = 1260.0
-offset_bottom = 386.0
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 58.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("2_board")
 
-[node name="Bottom" type="HBoxContainer" parent="."]
-layout_mode = 0
-offset_left = 20.0
-offset_top = 392.0
-offset_right = 1260.0
-offset_bottom = 708.0
+[node name="TopBar" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 8.0
+offset_top = 6.0
+offset_right = -8.0
+offset_bottom = 54.0
+grow_horizontal = 2
+mouse_filter = 2
 theme_override_constants/separation = 10
 
-[node name="WestCard" type="PanelContainer" parent="Bottom"]
-custom_minimum_size = Vector2(215, 0)
+[node name="WestChip" type="PanelContainer" parent="TopBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 0)
 layout_mode = 2
 
-[node name="Margin" type="MarginContainer" parent="Bottom/WestCard"]
-layout_mode = 2
-theme_override_constants/margin_left = 10
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 10
-theme_override_constants/margin_bottom = 8
-
-[node name="WestInfo" type="RichTextLabel" parent="Bottom/WestCard/Margin"]
+[node name="WestChipText" type="RichTextLabel" parent="TopBar/WestChip"]
 unique_name_in_owner = true
 layout_mode = 2
+mouse_filter = 2
 bbcode_enabled = true
 fit_content = true
 scroll_active = false
+autowrap_mode = 0
+theme_override_font_sizes/normal_font_size = 12
+theme_override_font_sizes/bold_font_size = 13
 
-[node name="Center" type="PanelContainer" parent="Bottom"]
+[node name="Center" type="VBoxContainer" parent="TopBar"]
 layout_mode = 2
 size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 0
+alignment = 1
 
-[node name="Margin" type="MarginContainer" parent="Bottom/Center"]
+[node name="PhaseRow" type="CenterContainer" parent="TopBar/Center"]
 layout_mode = 2
-theme_override_constants/margin_left = 10
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 10
-theme_override_constants/margin_bottom = 8
+mouse_filter = 2
 
-[node name="Stack" type="VBoxContainer" parent="Bottom/Center/Margin"]
-layout_mode = 2
-
-[node name="OrderPanel" type="VBoxContainer" parent="Bottom/Center/Margin/Stack"]
+[node name="PhaseBar" type="HBoxContainer" parent="TopBar/Center/PhaseRow"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 3
-script = ExtResource("3_orders")
+script = ExtResource("4_phases")
 
-[node name="Playback" type="VBoxContainer" parent="Bottom/Center/Margin/Stack"]
+[node name="StatusLabel" type="Label" parent="TopBar/Center"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.72, 0.76, 1)
+theme_override_font_sizes/font_size = 11
+horizontal_alignment = 1
+
+[node name="EastChip" type="PanelContainer" parent="TopBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+
+[node name="EastChipText" type="RichTextLabel" parent="TopBar/EastChip"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+autowrap_mode = 0
+theme_override_font_sizes/normal_font_size = 12
+theme_override_font_sizes/bold_font_size = 13
+
+[node name="Detail" type="PanelContainer" parent="."]
 unique_name_in_owner = true
 visible = false
-layout_mode = 2
-size_flags_vertical = 3
+custom_minimum_size = Vector2(230, 0)
+layout_mode = 0
+offset_left = 8.0
+offset_top = 60.0
+offset_right = 238.0
+offset_bottom = 260.0
+mouse_filter = 2
 
-[node name="PhaseEvents" type="RichTextLabel" parent="Bottom/Center/Margin/Stack/Playback"]
-unique_name_in_owner = true
+[node name="Margin" type="MarginContainer" parent="Detail"]
 layout_mode = 2
-size_flags_vertical = 3
-bbcode_enabled = true
-
-[node name="Buttons" type="HBoxContainer" parent="Bottom/Center/Margin/Stack/Playback"]
-layout_mode = 2
-
-[node name="NextButton" type="Button" parent="Bottom/Center/Margin/Stack/Playback/Buttons"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-focus_mode = 0
-text = "Next phase  (Space)"
-
-[node name="AutoButton" type="Button" parent="Bottom/Center/Margin/Stack/Playback/Buttons"]
-unique_name_in_owner = true
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-text = "Auto"
-
-[node name="SkipButton" type="Button" parent="Bottom/Center/Margin/Stack/Playback/Buttons"]
-unique_name_in_owner = true
-layout_mode = 2
-focus_mode = 0
-text = "Skip to end"
-
-[node name="EastCard" type="PanelContainer" parent="Bottom"]
-custom_minimum_size = Vector2(215, 0)
-layout_mode = 2
-
-[node name="Margin" type="MarginContainer" parent="Bottom/EastCard"]
-layout_mode = 2
+mouse_filter = 2
 theme_override_constants/margin_left = 10
 theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 8
 
-[node name="EastInfo" type="RichTextLabel" parent="Bottom/EastCard/Margin"]
+[node name="DetailText" type="RichTextLabel" parent="Detail/Margin"]
 unique_name_in_owner = true
 layout_mode = 2
+mouse_filter = 2
 bbcode_enabled = true
 fit_content = true
 scroll_active = false
+autowrap_mode = 0
+theme_override_font_sizes/normal_font_size = 13
+theme_override_font_sizes/bold_font_size = 14
 
-[node name="LogCard" type="PanelContainer" parent="Bottom"]
-custom_minimum_size = Vector2(290, 0)
-layout_mode = 2
+[node name="HoverLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 14.0
+offset_top = -122.0
+offset_right = -100.0
+offset_bottom = -102.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.8, 0.82, 0.86, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 12
 
-[node name="Margin" type="MarginContainer" parent="Bottom/LogCard"]
+[node name="BottomBar" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = -94.0
+offset_right = -8.0
+offset_bottom = -6.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="Margin" type="MarginContainer" parent="BottomBar"]
 layout_mode = 2
 theme_override_constants/margin_left = 8
 theme_override_constants/margin_top = 6
 theme_override_constants/margin_right = 8
 theme_override_constants/margin_bottom = 6
 
-[node name="Log" type="RichTextLabel" parent="Bottom/LogCard/Margin"]
+[node name="Stack" type="VBoxContainer" parent="BottomBar/Margin"]
+layout_mode = 2
+
+[node name="OrderPanel" type="VBoxContainer" parent="BottomBar/Margin/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("3_orders")
+
+[node name="Playback" type="HBoxContainer" parent="BottomBar/Margin/Stack"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="PhaseEvents" type="RichTextLabel" parent="BottomBar/Margin/Stack/Playback"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
+size_flags_horizontal = 3
+bbcode_enabled = true
+scroll_following = true
+theme_override_font_sizes/normal_font_size = 13
+theme_override_font_sizes/bold_font_size = 13
+
+[node name="NextButton" type="Button" parent="BottomBar/Margin/Stack/Playback"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(170, 0)
+layout_mode = 2
+focus_mode = 0
+text = "Next phase  (Space)"
+
+[node name="AutoButton" type="Button" parent="BottomBar/Margin/Stack/Playback"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+text = "Auto"
+
+[node name="SkipButton" type="Button" parent="BottomBar/Margin/Stack/Playback"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+text = "Skip"
+
+[node name="LogButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -84.0
+offset_top = -128.0
+offset_right = -10.0
+offset_bottom = -100.0
+grow_horizontal = 0
+grow_vertical = 0
+focus_mode = 0
+toggle_mode = true
+text = "Log (L)"
+
+[node name="LogCard" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -330.0
+offset_top = 66.0
+offset_right = -10.0
+offset_bottom = -134.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="LogCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 6
+
+[node name="Log" type="RichTextLabel" parent="LogCard/Margin"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/normal_font_size = 13

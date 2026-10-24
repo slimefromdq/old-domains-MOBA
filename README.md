@@ -20,12 +20,24 @@ Pick **Play vs AI** (you are West; a simple bot plays East from what East can se
    - Click an **enemy in range** to Basic Attack it, or press **1-6** / the buttons for other actions, then click
      **orange tiles** to target. Attacks hit *tiles*, not units.
    - Hero A's **Delayed shot** box makes the Basic Attack land after the Move phase (-1 damage).
+   - Each action button shows what it does, which phase it lands in, and what it costs (cooldown, or your Move for Recall).
+     **0 / Just move** skips the action: moving without attacking is always allowed.
+   - The phase bar at the top shows the turn order and highlights where your Move and Action happen.
+     During playback it lights up the phase being shown.
+   - The corner chips show each hero's level, HP, Tower, Base and gold. Hover a chip or a hero on the board for
+     the full card. Press **L** for the match log.
+     Targeted tiles preview the damage, and the panel says what's there and whether it dies.
    - **Space** or **Enter** ends the turn. **Esc** or right-click cancels.
    - Hot-seat only: West plans, then the device is passed and East plans. Neither sees the other's orders.
 3. The turn plays back phase by phase: Guard -> Dash -> Attack -> Move -> Minions -> Tower & Base -> Upkeep.
    Vs AI it plays automatically; **Space** steps forward, or use Auto / Skip.
 
-Camera: **mouse wheel** zooms, **middle-drag** orbits, **Q / E** turn 45 degrees, **R** resets the view.
+Camera (view the board from any angle):
+- **Orbit:** middle-drag, or Alt + left-drag on a trackpad. **Q / E** turn 45 degrees.
+- **Pan:** WASD or arrow keys, Shift + middle-drag, or two-finger trackpad scroll.
+- **Zoom:** mouse wheel (zooms toward the cursor), **+ / -**, or pinch.
+- **Tilt:** Page Up / Page Down. **T** toggles a straight-down map view.
+- **F** centers on your hero, **R** resets. The dial in the top-right corner points from West to East.
 You can click a unit's model or the tile under it; both pick that tile.
 
 Fog of war:

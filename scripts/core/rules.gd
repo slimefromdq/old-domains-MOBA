@@ -21,9 +21,17 @@ const MINION_STATS := {
 	Unit.Kind.SIEGE: {"name": "Siege minion", "hp": 8, "damage": 1, "structure_damage": 3, "range": 1, "gold": 4, "xp": 4},
 }
 const WAVE := [Unit.Kind.MELEE, Unit.Kind.MELEE, Unit.Kind.RANGED]
+const FIRST_TURN_SPEED_BONUS := 2   # heroes and minions move further on turn 1 so the lanes meet sooner
+
+# Waves grow over the match so pushes can finish a Tower. Every other wave,
+# minions get +1 damage to units and +1 damage to structures (wave n, counting
+# from 0, gets +n/2 of each). Extra HP was tried and made pushes slower: equal
+# waves just took longer to trade.
+const WAVE_DAMAGE_EVERY := 2
+const WAVE_STRUCTURE_DAMAGE_EVERY := 2
 
 # --- Structures (doc) --------------------------------------------------------
-const TOWER := {"name": "Tower", "hp": 15, "range": 2, "vs_minion": 2, "vs_hero": 4}   # hp: doc 30, lowered for testing
+const TOWER := {"name": "Tower", "hp": 15, "range": 2, "vs_minion": 1, "vs_hero": 4}   # hp: doc 30, vs_minion: doc 2; both lowered so waves can push
 const BASE := {"name": "Base", "hp": 15, "range": 2, "vs_minion": 1, "vs_hero": 2}   # vs_minion (assumed)
 const TOWER_LOSS_SHIELD := 10
 
@@ -56,6 +64,11 @@ const RESPAWN_TURNS_LATE := 3              # (doc) from level 4
 const RESPAWN_LATE_LEVEL := 4
 const DELAYED_SHOT_PENALTY := 1            # (doc) Hero A trait
 const STRUCTURE_ARMOR := 1                 # (doc) Hero D trait
+
+
+## How many tiles `u` may move this turn: its Speed, plus a boost on turn 1.
+static func move_speed(s: MatchState, u: Unit) -> int:
+	return u.speed + (FIRST_TURN_SPEED_BONUS if s.turn == 1 else 0)
 
 
 static func dist(a: Vector2i, b: Vector2i) -> int:
