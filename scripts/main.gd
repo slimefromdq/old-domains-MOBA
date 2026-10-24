@@ -78,6 +78,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6:
 			if stage == Stage.PLAN:
 				order_panel.press_action(event.keycode - KEY_1)
+		KEY_0:
+			if stage == Stage.PLAN:
+				order_panel.press_action(OrderPanel.ACTIONS.find(HeroOrders.Action.NONE))
 
 
 # --- Mode and hero pick ---------------------------------------------------------------

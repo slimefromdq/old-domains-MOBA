@@ -20,6 +20,10 @@ Pick **Play vs AI** (you are West; a simple bot plays East from what East can se
    - Click an **enemy in range** to Basic Attack it, or press **1-6** / the buttons for other actions, then click
      **orange tiles** to target. Attacks hit *tiles*, not units.
    - Hero A's **Delayed shot** box makes the Basic Attack land after the Move phase (-1 damage).
+   - Each action button shows what it does, which phase it lands in, and what it costs (cooldown, or your Move for Recall).
+     **0 / Just move** skips the action: moving without attacking is always allowed.
+   - The phase bar under the buttons shows the turn order and highlights where your Move and Action happen.
+     Targeted tiles preview the damage, and the panel says what's there and whether it dies.
    - **Space** or **Enter** ends the turn. **Esc** or right-click cancels.
    - Hot-seat only: West plans, then the device is passed and East plans. Neither sees the other's orders.
 3. The turn plays back phase by phase: Guard -> Dash -> Attack -> Move -> Minions -> Tower & Base -> Upkeep.
