@@ -448,7 +448,14 @@ func test_recall() -> void:
 	check(s.map.is_fountain(r.state.hero(0).pos), "recalled to the fountain")
 	s.hero(1).pos = Vector2i(6, 2)
 	r = Resolver.resolve(s, orders(A.RECALL), orders(A.BASIC, [Vector2i(5, 2)]))
-	eq(r.state.hero(0).pos, Vector2i(5, 2), "damage interrupts recall")
+	eq(r.state.hero(0).pos, Vector2i(5, 2), "enemy hero damage interrupts recall")
+	# Minion damage doesn't.
+	s = board("A", "D", Vector2i(5, 2), Vector2i(12, 1))
+	s.add_minion(Unit.Kind.MELEE, Rules.EAST, Vector2i(6, 2))
+	MinionAI.update_telegraphs(s)
+	r = Resolver.resolve(s, orders(A.RECALL), idle())
+	check(r.state.hero(0).hp < s.hero(0).hp, "the minion hit the recalling hero")
+	check(s.map.is_fountain(r.state.hero(0).pos), "minion damage doesn't interrupt recall")
 
 
 func test_sudden_death() -> void:

@@ -30,7 +30,6 @@ var died_turn := -1
 var guarding := false          # this turn
 var rooted := false            # this turn: Move cancelled
 var displaced := false         # this turn: pushed before Move, so Move is lost
-var took_damage := false       # this turn
 var hit_hero_from := Vector2i(-1, -1)   # this turn: where it stood when it hit an enemy hero
 var tether := {}               # on the victim: {"by": id, "turns": n}
 var follow_lock := {}          # on Hero D: {"target": id, "turns": n}
