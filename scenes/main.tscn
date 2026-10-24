@@ -165,7 +165,7 @@ fit_content = true
 scroll_active = false
 
 [node name="LogCard" type="PanelContainer" parent="Bottom"]
-custom_minimum_size = Vector2(290, 0)
+custom_minimum_size = Vector2(220, 0)
 layout_mode = 2
 
 [node name="Margin" type="MarginContainer" parent="Bottom/LogCard"]

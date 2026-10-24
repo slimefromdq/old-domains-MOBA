@@ -642,6 +642,15 @@ func _draw_hud() -> void:
 		if Legality.is_post_move(planner, planned):
 			for t in planned.targets:
 				_label_at(BoardModels.center(t), Vector2(0, 30), "after move", 11, DELAYED_COLOR)
+		# Preview what each target takes, over whatever stands there now.
+		for t in planned.targets:
+			var dmg := OrderPanel.predicted_damage(state, planner, planned, t)
+			if dmg < 0:
+				continue
+			var u := state.unit_at(t)
+			var h: float = BoardModels.HEIGHTS[u.kind] if u != null and not Vision.is_hidden(u) else 0.3
+			var col := DELAYED_COLOR if Legality.is_post_move(planner, planned) else STRIKE_COLOR
+			_label_at(BoardModels.center(t, h), Vector2(0, -16), "-%d?" % dmg if u == null or Vision.is_hidden(u) else "-%d" % dmg, 18, col)
 	if prev_state != null:
 		_phase_labels()
 	var hint := "Wheel: zoom   Middle-drag: orbit   Q / E: turn   R: reset view"
