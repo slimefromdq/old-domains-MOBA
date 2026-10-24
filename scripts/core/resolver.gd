@@ -447,7 +447,7 @@ func _phase_minions() -> void:
 		var m: Unit = a[0]
 		var t: Unit = a[1]
 		var stats: Dictionary = Rules.MINION_STATS[m.kind]
-		var amount: int = (stats["structure_damage"] if t.is_structure() else stats["damage"]) + s.minion_damage_bonus()
+		var amount: int = (m.structure_damage if t.is_structure() else m.damage) + s.minion_damage_bonus()
 		_damage(m, t, amount, "attack")
 	_resolve_deaths()
 
@@ -561,8 +561,13 @@ func _phase_upkeep() -> void:
 	# Next turn.
 	s.turn += 1
 	if (s.turn - 1) % Rules.WAVE_INTERVAL == 0:
+		var bonus := s.wave_damage_bonus()
 		var wave := s.spawn_wave()
-		var note := " (sudden death: +%d minion damage)" % s.minion_damage_bonus() if s.minion_damage_bonus() > 0 else ""
+		var note := ""
+		if bonus > 0:
+			note += " (wave %d: +%d damage)" % [s.waves_spawned, bonus]
+		if s.minion_damage_bonus() > 0:
+			note += " (sudden death: +%d minion damage)" % s.minion_damage_bonus()
 		_event("spawn", "Minion waves spawn%s." % note, {"unit": -1, "count": wave.size()})
 	if s.turn == Rules.SUDDEN_DEATH_TURN:
 		_event("status", "Sudden death begins!", {"unit": -1})

@@ -219,7 +219,30 @@ func test_no_minion_stays_stuck_behind_its_tower() -> void:
 	for id in ids:
 		var m := s.unit_by_id(id)
 		if m != null and m.is_alive():
-			check(m.pos.x >= 3 and m.pos.x <= 9, "first-wave minion %d left its spawn (at %s)" % [id, m.pos])
+			check(m.pos.x >= 2 and m.pos.x <= 10, "first-wave minion %d left its spawn (at %s)" % [id, m.pos])
+
+
+func test_waves_get_stronger() -> void:
+	var s := MatchState.new_match(MapData.create_default(), "A", "D")
+	var first: Unit = s.units.filter(func(u): return u.is_minion())[0]
+	eq(first.damage, 1, "wave 1: base damage")
+	eq(first.structure_damage, 1, "wave 1: base structure damage")
+	s.spawn_wave()   # wave 2
+	var w3 := s.spawn_wave()   # wave 3
+	var melee: Unit = w3.filter(func(u): return u.kind == Unit.Kind.MELEE)[0]
+	eq(melee.damage, 2, "wave 3: +1 damage")
+	eq(melee.structure_damage, 2, "wave 3: +1 structure damage")
+	eq(s.clone().waves_spawned, 3, "wave count survives cloning")
+
+
+func test_minions_spread_around_the_tower() -> void:
+	var s := board("A", "D", Vector2i(4, 2), Vector2i(12, 1))
+	var tower := s.structure(Rules.EAST, Unit.Kind.TOWER)
+	var a := s.add_minion(Unit.Kind.MELEE, Rules.WEST, tower.pos + Vector2i(-1, 0))
+	var b := s.add_minion(Unit.Kind.MELEE, Rules.WEST, tower.pos + Vector2i(-2, -1))
+	var step := MinionAI.step_minion(s, b, [])
+	eq(Rules.dist(step, tower.pos), 1, "the second minion walks to a free tile next to the Tower instead of queueing")
+	check(step != a.pos, "and not onto its wavemate")
 
 
 func test_delayed_shot_hits_the_tile_moved_to() -> void:

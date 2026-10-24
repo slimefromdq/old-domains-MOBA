@@ -21,9 +21,15 @@ const MINION_STATS := {
 	Unit.Kind.SIEGE: {"name": "Siege minion", "hp": 8, "damage": 1, "structure_damage": 3, "range": 1, "gold": 4, "xp": 4},
 }
 const WAVE := [Unit.Kind.MELEE, Unit.Kind.MELEE, Unit.Kind.RANGED]
+# Waves grow over the match so pushes can finish a Tower. Every other wave,
+# minions get +1 damage to units and +1 damage to structures (wave n, counting
+# from 0, gets +n/2 of each). Extra HP was tried and made pushes slower: equal
+# waves just took longer to trade.
+const WAVE_DAMAGE_EVERY := 2
+const WAVE_STRUCTURE_DAMAGE_EVERY := 2
 
 # --- Structures (doc) --------------------------------------------------------
-const TOWER := {"name": "Tower", "hp": 15, "range": 2, "vs_minion": 2, "vs_hero": 4}   # hp: doc 30, lowered for testing
+const TOWER := {"name": "Tower", "hp": 15, "range": 2, "vs_minion": 1, "vs_hero": 4}   # hp: doc 30, vs_minion: doc 2; both lowered so waves can push
 const BASE := {"name": "Base", "hp": 15, "range": 2, "vs_minion": 1, "vs_hero": 2}   # vs_minion (assumed)
 const TOWER_LOSS_SHIELD := 10
 
