@@ -261,8 +261,6 @@ func _damage(src: Unit, t: Unit, amount: int, what: String) -> int:
 		absorbed = mini(dmg, s.base_shield[t.side])
 		s.base_shield[t.side] -= absorbed
 	t.hp = maxi(0, t.hp - (dmg - absorbed))
-	if dmg > 0:
-		t.took_damage = true
 	if t.is_hero() and src.is_hero() and src.side != t.side and dmg > 0:
 		_hit_by_enemy_hero[t.id] = true
 	var note := " (shield absorbs %d)" % absorbed if absorbed > 0 else ""
@@ -518,8 +516,9 @@ func _phase_upkeep() -> void:
 	for side in 2:
 		var h: Unit = heroes[side]
 		if h.is_alive() and orders[side].action == A.RECALL:
-			if h.took_damage:
-				_event("status", "%s's Recall is interrupted." % h.label(), {"unit": h.id})
+			# Only the enemy hero can interrupt a Recall; minion and Tower hits don't.
+			if _hit_by_enemy_hero.has(h.id):
+				_event("status", "%s's Recall is interrupted by the enemy hero." % h.label(), {"unit": h.id})
 			else:
 				var dest := s.fountain_tile(side)
 				_event("move", "%s recalls to base." % h.label(), {"unit": h.id, "from": h.pos, "to": dest, "recall": true})
@@ -539,7 +538,6 @@ func _phase_upkeep() -> void:
 		h.guarding = false
 		h.rooted = false
 		h.displaced = false
-		h.took_damage = false
 		h.hit_hero_from = NO_TILE
 		if not h.is_alive() and h.died_turn < s.turn:
 			h.respawn_timer -= 1

@@ -20,6 +20,9 @@ The objective spot is drawn on the map but does nothing yet.
 
 **Temporary change:** Tower and Base HP are 15, not the doc's 30, while we test pacing.
 
+**Easier Recall (not in the doc):** only damage from the enemy hero interrupts a Recall. Minion, Tower and Base hits
+don't. The doc says any damage does, which made Recall nearly impossible near a wave.
+
 ## Map
 
 ```

@@ -252,7 +252,7 @@ func _action_tooltip(a: HeroOrders.Action) -> String:
 		A.GUARD:
 			return "Guard phase. Half damage this turn (rounded down); can't be pushed."
 		A.RECALL:
-			return "Uses Move and Action. In Upkeep you return to base - unless you took damage this turn."
+			return "Uses Move and Action. In Upkeep you return to base - unless the enemy hero damaged you this turn. Minion and Tower hits don't stop it."
 	var ab := Heroes.ability(hero.hero_id, HeroOrders.ability_key(a))
 	return "%s phase, cooldown %d, unlocks at level %d.\n%s" % [
 		Heroes.PHASE_NAMES[ab["phase"]], ab["cooldown"], ab["level"], ab["text"]]
