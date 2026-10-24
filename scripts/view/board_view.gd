@@ -800,9 +800,10 @@ func _draw_hud() -> void:
 	var hint_w := 0.0
 	for h in hints:
 		hint_w = maxf(hint_w, font.get_string_size(h, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x)
-	_hud.draw_rect(Rect2(4, size.y - 15 * hints.size() - 12, hint_w + 12, 15 * hints.size() + 8), Color(0, 0, 0, 0.45))
+	# Top-left: the bottom of the screen belongs to the action bar.
+	_hud.draw_rect(Rect2(4, 4, hint_w + 12, 15 * hints.size() + 8), Color(0, 0, 0, 0.45))
 	for i in hints.size():
-		_hud.draw_string(font, Vector2(10, size.y - 10 - 15 * (hints.size() - 1 - i)), hints[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.6))
+		_hud.draw_string(font, Vector2(10, 19 + 15 * i), hints[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.6))
 	_draw_compass()
 
 

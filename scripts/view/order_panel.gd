@@ -11,73 +11,61 @@ const A := HeroOrders.Action
 const ACTIONS := [A.BASIC, A.ABILITY_1, A.ABILITY_2, A.ULT, A.GUARD, A.RECALL, A.NONE]
 enum Mode { MOVE, TARGET }
 
-## The order a turn plays out in, as the resolver runs it.
-const PHASES := ["Guard", "Dash", "Attack", "Move", "After Move", "Minions", "Towers", "Upkeep"]
 
 var state: MatchState
 var hero: Unit
 var orders := HeroOrders.new()
 var mode := Mode.MOVE
 
-var _title: Label
 var _buttons := {}
 var _delayed: CheckBox
 var _delayed_pref := false
 var _summary: Label
 var _lock: Button
-var _phase_chips: Array[PanelContainer] = []
-var _phase_notes: Array[Label] = []
 
 
 func _ready() -> void:
-	add_theme_constant_override("separation", 6)
-	_title = Label.new()
-	_title.add_theme_font_size_override("font_size", 18)
-	add_child(_title)
-	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.add_theme_constant_override("h_separation", 6)
-	grid.add_theme_constant_override("v_separation", 6)
-	add_child(grid)
-	grid.columns = 4
+	add_theme_constant_override("separation", 4)
+	_summary = Label.new()
+	_summary.add_theme_color_override("font_color", Color(0.88, 0.9, 0.93))
+	_summary.add_theme_font_size_override("font_size", 12)
+	_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_summary.max_lines_visible = 2
+	add_child(_summary)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	add_child(row)
 	for a in ACTIONS:
 		var b := Button.new()
 		b.toggle_mode = true
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(0, 46)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(104, 38)
 		b.add_theme_font_size_override("font_size", 11)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		b.clip_text = true
 		b.pressed.connect(_on_action.bind(a))
-		grid.add_child(b)
+		row.add_child(b)
 		_buttons[a] = b
 	_delayed = CheckBox.new()
-	_delayed.text = "Delayed shot\n(after Move, -1)"
+	_delayed.text = "Delayed\nshot"
+	_delayed.tooltip_text = "Hero A: your Basic Attack lands after the Move phase, at -1 damage."
 	_delayed.add_theme_font_size_override("font_size", 11)
-	_delayed.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_delayed.focus_mode = Control.FOCUS_NONE
 	_delayed.toggled.connect(_on_delayed)
-	grid.add_child(_delayed)
-	add_child(_build_phase_bar())
-	_summary = Label.new()
-	_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_summary.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_summary.add_theme_color_override("font_color", Color(0.85, 0.87, 0.9))
-	_summary.add_theme_font_size_override("font_size", 12)
-	add_child(_summary)
-	var row := HBoxContainer.new()
-	add_child(row)
+	row.add_child(_delayed)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
 	var clear := Button.new()
 	clear.text = "Clear"
 	clear.focus_mode = Control.FOCUS_NONE
 	clear.pressed.connect(func(): begin(state, hero))
 	row.add_child(clear)
 	_lock = Button.new()
-	_lock.text = "End turn  (Space)"
+	_lock.text = "End turn (Space)"
+	_lock.custom_minimum_size = Vector2(130, 0)
 	_lock.focus_mode = Control.FOCUS_NONE
-	_lock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lock.pressed.connect(lock_in)
 	row.add_child(_lock)
 
@@ -232,8 +220,6 @@ func _on_delayed(on: bool) -> void:
 func _refresh() -> void:
 	if hero == null:
 		return
-	_title.text = "%s - plan your turn" % hero.label()
-	_title.add_theme_color_override("font_color", BoardView.SIDE_COLORS[hero.side].lightened(0.35))
 	for a in _buttons:
 		var b: Button = _buttons[a]
 		var key := (ACTIONS.find(a) + 1) % ACTIONS.size()
@@ -241,11 +227,10 @@ func _refresh() -> void:
 		var lines := _button_lines(a)
 		if why != "":
 			lines[2] = "Unlocks at level %s" % why.trim_prefix("Level ") if why.begins_with("Level") else why
-		b.text = "%d  %s\n%s\n%s" % [key, _action_name(a), lines[1], lines[2]]
+		b.text = "%d %s\n%s" % [key, _action_name(a), _button_short(a) if why == "" else lines[2]]
 		b.disabled = why != ""
 		b.set_pressed_no_signal(orders.action == a)
-		b.tooltip_text = _action_tooltip(a)
-	_refresh_phase_bar()
+		b.tooltip_text = "%s\n%s. %s." % [_action_tooltip(a), lines[1], lines[2]]
 	_delayed.visible = hero.hero_id == "A"
 	_delayed.set_pressed_no_signal(orders.delayed if orders.action == A.BASIC else _delayed_pref)
 	_delayed.disabled = not hero.is_alive()
@@ -253,6 +238,32 @@ func _refresh() -> void:
 	_lock.disabled = mode == Mode.TARGET and orders.targets.size() < need
 	_summary.text = _summary_text()
 	changed.emit()
+
+
+## The short second line on an action button: effect and cost.
+func _button_short(a: HeroOrders.Action) -> String:
+	match a:
+		A.NONE:
+			return "skip action"
+		A.BASIC:
+			var dmg := hero.damage - (Rules.DELAYED_SHOT_PENALTY if orders.delayed or (_delayed_pref and hero.hero_id == "A") else 0)
+			return "%d dmg · range %d" % [dmg, hero.attack_range]
+		A.GUARD:
+			return "half damage"
+		A.RECALL:
+			return "costs your Move"
+	var ab := Heroes.ability(hero.hero_id, HeroOrders.ability_key(a))
+	if ab.is_empty():
+		return ""
+	var parts: PackedStringArray = []
+	if ab.has("damage") and ab["phase"] != Heroes.Phase.GUARD:
+		parts.append("%d dmg" % ab["damage"])
+	if ab["phase"] == Heroes.Phase.DASH:
+		parts.append("dash %d" % ab["range"])
+	elif ab["range"] != Heroes.ANY_RANGE:
+		parts.append("r%d" % ab["range"])
+	parts.append("cd %d" % ab["cooldown"])
+	return " · ".join(parts)
 
 
 ## [name, what it does, what it costs] for an action button.
@@ -345,40 +356,13 @@ func _summary_text() -> String:
 	var warn := _danger_note()
 	if warn != "":
 		lines.append(warn)
-	return "\n".join(lines)
+	return "    ".join(lines)
 
 
 # --- Turn order and consequences -------------------------------------------------------
 
-func _build_phase_bar() -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 2)
-	row.tooltip_text = "The turn plays out left to right. Your Move and Action are highlighted."
-	for name in PHASES:
-		var chip := PanelContainer.new()
-		chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var v := VBoxContainer.new()
-		v.add_theme_constant_override("separation", 0)
-		chip.add_child(v)
-		var l := Label.new()
-		l.text = name
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		l.add_theme_font_size_override("font_size", 10)
-		l.clip_text = true
-		v.add_child(l)
-		var note := Label.new()
-		note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		note.add_theme_font_size_override("font_size", 10)
-		note.clip_text = true
-		v.add_child(note)
-		row.add_child(chip)
-		_phase_chips.append(chip)
-		_phase_notes.append(note)
-	return row
-
-
 ## What your hero does in each phase this turn, by phase index.
-func _my_phases() -> Dictionary:
+func my_phases() -> Dictionary:
 	var out := {}
 	if not hero.is_alive():
 		return out
@@ -401,35 +385,6 @@ func _my_phases() -> Dictionary:
 	elif a == A.RECALL:
 		out[3] = "(Recall)"
 	return out
-
-
-func _refresh_phase_bar() -> void:
-	var mine := _my_phases()
-	var col: Color = BoardView.SIDE_COLORS[hero.side]
-	for i in _phase_chips.size():
-		var on := mine.has(i)
-		var sb := StyleBoxFlat.new()
-		sb.set_corner_radius_all(4)
-		sb.content_margin_left = 1
-		sb.content_margin_right = 1
-		sb.content_margin_top = 1
-		sb.content_margin_bottom = 1
-		sb.bg_color = col.darkened(0.2) if on else Color(1, 1, 1, 0.06)
-		_phase_chips[i].add_theme_stylebox_override("panel", sb)
-		_phase_notes[i].text = mine.get(i, " ")
-		_phase_chips[i].tooltip_text = _phase_help(i)
-
-
-func _phase_help(i: int) -> String:
-	match i:
-		0: return "Guard and other protective effects switch on."
-		1: return "Dashes move instantly. The only way to dodge an attack."
-		2: return "All attacks hit their tiles at the same moment. Moving later does not dodge them."
-		3: return "Normal movement. Where you end is where you can be hit next turn."
-		4: return "Delayed shots and after-move abilities hit the tiles they target."
-		5: return "Minions move and attack exactly as their arrows show."
-		6: return "Towers and Bases fire at their marked targets."
-	return "Gold, XP and level-ups; Recall happens; cooldowns tick down."
 
 
 ## Damage `orders` would deal to whatever stands on `tile` now, or -1 if
