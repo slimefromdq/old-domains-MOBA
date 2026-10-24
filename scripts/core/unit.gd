@@ -14,6 +14,7 @@ var max_hp := 0
 var damage := 0
 var attack_range := 1
 var speed := 0
+var structure_damage := 0      # minions: damage to Towers and Bases
 
 # --- Heroes ------------------------------------------------------------------
 var hero_id := ""

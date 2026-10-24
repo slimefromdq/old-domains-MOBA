@@ -63,16 +63,42 @@ static func pick_target(s: MatchState, m: Unit, from: Vector2i, aggro: Array) ->
 	return best
 
 
-## Walks up to its move speed in tiles toward the enemy Base, stopping as soon as
-## anything is in range. Only ever steps closer, so it never oscillates.
+## Walks up to its move speed in tiles toward the enemy Tower (or the Base once the
+## Tower is down), stopping as soon as anything is in range. It heads for the
+## nearest tile it could attack the structure from, so a wave spreads around
+## the Tower instead of queueing behind one minion. Only ever steps closer, so
+## it never oscillates.
 static func step_minion(s: MatchState, m: Unit, aggro: Array) -> Vector2i:
-	# Structures never move, so route around them. Otherwise the minion that
-	# spawns right behind its own Tower waits there forever.
+	# Route around structures and allies as they stand now, so a minion walks
+	# around a blocker (its own Tower, its hero, a wavemate) instead of waiting
+	# behind it forever. Enemies aren't routed around: the minion walks up and
+	# fights them.
 	var blocked := {}
 	for u in s.units:
-		if u.is_structure() and u.is_alive():
+		if u != m and u.is_alive() and (u.is_structure() or u.side == m.side):
 			blocked[u.pos] = true
-	var field := distance_field(s.map, s.map.bases[1 - m.side], blocked)
+	var goal := s.structure(1 - m.side, Unit.Kind.TOWER)
+	if goal == null:
+		goal = s.structure(1 - m.side, Unit.Kind.BASE)
+	var goals: Array[Vector2i] = []
+	if goal != null:
+		for c in s.map.walkable_tiles():
+			if not blocked.has(c) and Rules.dist(c, goal.pos) <= m.attack_range:
+				goals.append(c)
+		if goals.is_empty():   # every attack spot is taken: queue up behind them
+			for c in s.map.walkable_tiles():
+				if c != goal.pos and Rules.dist(c, goal.pos) <= m.attack_range:
+					goals.append(c)
+	if goals.is_empty():
+		goals.append(s.map.bases[1 - m.side])
+	var field := distance_field(s.map, goals, blocked)
+	if not field.has(m.pos):
+		# Walled in by allies: close up behind them instead of standing still.
+		var structures := {}
+		for u in s.units:
+			if u.is_structure() and u.is_alive():
+				structures[u.pos] = true
+		field = distance_field(s.map, goals, structures)
 	var pos := m.pos
 	for i in Rules.move_speed(s, m):
 		if pick_target(s, m, pos, aggro) != null:
@@ -80,12 +106,7 @@ static func step_minion(s: MatchState, m: Unit, aggro: Array) -> Vector2i:
 		var best := pos
 		for d in Rules.dirs_for(m.side):
 			var n: Vector2i = pos + d
-			if not s.map.is_walkable(n):
-				continue
-			var occ := s.unit_at(n)
-			if occ != null and occ != m:
-				continue
-			if field.get(n, 999) < field.get(best, 999):
+			if field.has(n) and field[n] < field.get(best, 999) and s.unit_at(n) == null:
 				best = n
 		if best == pos:
 			break
@@ -141,10 +162,14 @@ static func _enemy_hero_within(s: MatchState, u: Unit, radius: int) -> bool:
 		and Vision.can_see_unit(s, u.side, e)
 
 
-## Steps from every tile to `goal`, never passing through `blocked` tiles.
-static func distance_field(map: MapData, goal: Vector2i, blocked := {}) -> Dictionary:
-	var dist := {goal: 0}
-	var frontier: Array[Vector2i] = [goal]
+## Steps from every tile to the nearest of `goals`, never passing through
+## `blocked` tiles.
+static func distance_field(map: MapData, goals: Array[Vector2i], blocked := {}) -> Dictionary:
+	var dist := {}
+	var frontier: Array[Vector2i] = []
+	for g in goals:
+		dist[g] = 0
+		frontier.append(g)
 	while not frontier.is_empty():
 		var c: Vector2i = frontier.pop_front()
 		for d in Rules.dirs_for(0):

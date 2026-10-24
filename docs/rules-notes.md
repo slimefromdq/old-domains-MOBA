@@ -23,6 +23,16 @@ The objective spot is drawn on the map but does nothing yet.
 **First-turn speed boost:** on turn 1, heroes and minions move +2 tiles (`Rules.FIRST_TURN_SPEED_BONUS`), so the
 waves meet near mid a turn sooner and combat starts earlier. Not in the design doc.
 
+
+**Stronger waves (not in the doc):** every other wave, minions get +1 damage to units and +1 damage to structures
+(wave 3 deals 2/2, wave 5 deals 3/3, ...). The Tower deals 1 to minions instead of the doc's 2. Minions head for the
+nearest free tile they can hit the enemy Tower (then Base) from, and walk around allies and structures in the way,
+so a wave spreads around the Tower instead of queueing behind one minion.
+
+Measured with the scripted bots (see "Pacing signals"): an undefended wave stream now takes the Tower on turn 9
+(was 11), and a bot against an idle hero takes the Tower in both hero pairings (before: once, on turn 29).
+Extra minion HP per wave was tried first and made pushes *slower*: equal waves just took longer to trade.
+
 ## Map
 
 ```
