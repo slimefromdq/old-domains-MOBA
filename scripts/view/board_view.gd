@@ -655,7 +655,7 @@ func _draw_hud() -> void:
 		_phase_labels()
 	var hint := "Wheel: zoom   Middle-drag: orbit   Q / E: turn   R: reset view"
 	var font := ThemeDB.fallback_font
-	_hud.draw_string(font, Vector2(10, size.y - 10), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.4))
+	_hud.draw_string(font, Vector2(10, 16), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.4))
 
 
 func _unit_labels(u: Unit, at: Vector3, alpha: float) -> void:

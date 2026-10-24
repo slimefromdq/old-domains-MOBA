@@ -22,7 +22,10 @@ Pick **Play vs AI** (you are West; a simple bot plays East from what East can se
    - Hero A's **Delayed shot** box makes the Basic Attack land after the Move phase (-1 damage).
    - Each action button shows what it does, which phase it lands in, and what it costs (cooldown, or your Move for Recall).
      **0 / Just move** skips the action: moving without attacking is always allowed.
-   - The phase bar under the buttons shows the turn order and highlights where your Move and Action happen.
+   - The phase bar at the top shows the turn order and highlights where your Move and Action happen.
+     During playback it lights up the phase being shown.
+   - The corner chips show each hero's level, HP, Tower, Base and gold. Hover a chip or a hero on the board for
+     the full card. Press **L** for the match log.
      Targeted tiles preview the damage, and the panel says what's there and whether it dies.
    - **Space** or **Enter** ends the turn. **Esc** or right-click cancels.
    - Hot-seat only: West plans, then the device is passed and East plans. Neither sees the other's orders.
