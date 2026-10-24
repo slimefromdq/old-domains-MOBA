@@ -268,6 +268,8 @@ func _summary_text() -> String:
 		lines.append("Move: staying put. Click a blue tile to move there.")
 	else:
 		lines.append("Move: %d tile(s) to %s." % [orders.move_path.size(), orders.move_path.back()])
+	if state.turn == 1 and _move_allowed():
+		lines.append("First turn: everyone moves +%d tiles (you: up to %d)." % [Rules.FIRST_TURN_SPEED_BONUS, Rules.move_speed(state, hero)])
 	if orders.action == A.NONE:
 		lines.append("Action: none. Click an enemy in range to attack it, or press 1-6.")
 	else:

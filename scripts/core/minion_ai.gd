@@ -63,12 +63,12 @@ static func pick_target(s: MatchState, m: Unit, from: Vector2i, aggro: Array) ->
 	return best
 
 
-## Walks up to `speed` tiles toward the enemy Base, stopping as soon as
+## Walks up to its move speed in tiles toward the enemy Base, stopping as soon as
 ## anything is in range. Only ever steps closer, so it never oscillates.
 static func step_minion(s: MatchState, m: Unit, aggro: Array) -> Vector2i:
 	var field := distance_field(s.map, s.map.bases[1 - m.side])
 	var pos := m.pos
-	for i in m.speed:
+	for i in Rules.move_speed(s, m):
 		if pick_target(s, m, pos, aggro) != null:
 			break
 		var best := pos

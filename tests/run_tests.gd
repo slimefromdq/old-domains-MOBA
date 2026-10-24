@@ -198,6 +198,7 @@ func test_collision_both_stop_short() -> void:
 
 func test_cannot_move_through_enemies() -> void:
 	var s := board("A", "D", Vector2i(4, 2), Vector2i(5, 2))
+	s.turn = 2   # normal speed; turn 1's boost could walk around the enemy
 	var opts := Legality.move_options(s, s.hero(0), s.hero(0).pos)
 	check(not opts.has(Vector2i(6, 2)), "no path through the enemy hero")
 	s.add_minion(Unit.Kind.MELEE, Rules.WEST, Vector2i(4, 1))
@@ -206,6 +207,26 @@ func test_cannot_move_through_enemies() -> void:
 	s.hero(1).pos = Vector2i(9, 2)
 	opts = Legality.move_options(s, s.hero(0), s.hero(0).pos)
 	check(opts.has(Vector2i(5, 1)), "can walk through an allied minion")
+
+
+func test_first_turn_speed_boost() -> void:
+	var s := MatchState.new_match(MapData.create_default(), "A", "D")
+	var h := s.hero(0)
+	var far := 0
+	for c in Legality.move_options(s, h, h.pos):
+		far = maxi(far, Rules.dist(h.pos, c))
+	eq(far, h.speed + Rules.FIRST_TURN_SPEED_BONUS, "turn 1: heroes move further")
+	var m := s.unit_at(Vector2i(1, 1))   # a West melee minion with a clear lane ahead
+	var start := m.pos
+	var r := Resolver.resolve(s, idle(), idle())
+	var after := r.state.unit_by_id(m.id)
+	eq(Rules.dist(start, after.pos), Rules.MINION_SPEED + Rules.FIRST_TURN_SPEED_BONUS, "turn 1: minions move further")
+	var s2 := r.state
+	h = s2.hero(0)
+	far = 0
+	for c in Legality.move_options(s2, h, h.pos):
+		far = maxi(far, Rules.dist(h.pos, c))
+	eq(far, h.speed, "turn 2: back to normal speed")
 
 
 func test_delayed_shot_hits_the_tile_moved_to() -> void:

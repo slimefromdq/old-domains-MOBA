@@ -20,6 +20,9 @@ The objective spot is drawn on the map but does nothing yet.
 
 **Temporary change:** Tower and Base HP are 15, not the doc's 30, while we test pacing.
 
+**First-turn speed boost:** on turn 1, heroes and minions move +2 tiles (`Rules.FIRST_TURN_SPEED_BONUS`), so the
+waves meet near mid a turn sooner and combat starts earlier. Not in the design doc.
+
 ## Map
 
 ```

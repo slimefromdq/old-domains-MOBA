@@ -21,6 +21,7 @@ const MINION_STATS := {
 	Unit.Kind.SIEGE: {"name": "Siege minion", "hp": 8, "damage": 1, "structure_damage": 3, "range": 1, "gold": 4, "xp": 4},
 }
 const WAVE := [Unit.Kind.MELEE, Unit.Kind.MELEE, Unit.Kind.RANGED]
+const FIRST_TURN_SPEED_BONUS := 2   # heroes and minions move further on turn 1 so the lanes meet sooner
 
 # --- Structures (doc) --------------------------------------------------------
 const TOWER := {"name": "Tower", "hp": 15, "range": 2, "vs_minion": 2, "vs_hero": 4}   # hp: doc 30, lowered for testing
@@ -56,6 +57,11 @@ const RESPAWN_TURNS_LATE := 3              # (doc) from level 4
 const RESPAWN_LATE_LEVEL := 4
 const DELAYED_SHOT_PENALTY := 1            # (doc) Hero A trait
 const STRUCTURE_ARMOR := 1                 # (doc) Hero D trait
+
+
+## How many tiles `u` may move this turn: its Speed, plus a boost on turn 1.
+static func move_speed(s: MatchState, u: Unit) -> int:
+	return u.speed + (FIRST_TURN_SPEED_BONUS if s.turn == 1 else 0)
 
 
 static func dist(a: Vector2i, b: Vector2i) -> int:
