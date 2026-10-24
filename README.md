@@ -25,7 +25,12 @@ Pick **Play vs AI** (you are West; a simple bot plays East from what East can se
 3. The turn plays back phase by phase: Guard -> Dash -> Attack -> Move -> Minions -> Tower & Base -> Upkeep.
    Vs AI it plays automatically; **Space** steps forward, or use Auto / Skip.
 
-Camera: **mouse wheel** zooms, **middle-drag** orbits, **Q / E** turn 45 degrees, **R** resets the view.
+Camera (view the board from any angle):
+- **Orbit:** middle-drag, or Alt + left-drag on a trackpad. **Q / E** turn 45 degrees.
+- **Pan:** WASD or arrow keys, Shift + middle-drag, or two-finger trackpad scroll.
+- **Zoom:** mouse wheel (zooms toward the cursor), **+ / -**, or pinch.
+- **Tilt:** Page Up / Page Down. **T** toggles a straight-down map view.
+- **F** centers on your hero, **R** resets. The dial in the top-right corner points from West to East.
 You can click a unit's model or the tile under it; both pick that tile.
 
 Fog of war:

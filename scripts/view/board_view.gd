@@ -5,7 +5,9 @@ extends Control
 ## drawn in 2D on top. Reports clicks and hover as tiles. Shows exactly what
 ## the old 2D board showed; the rules never see this node.
 ##
-## Camera: mouse wheel zooms, middle-drag orbits, Q / E turn, R resets.
+## Camera: orbit (middle-drag, Alt+left-drag, Q / E), pan (WASD / arrows,
+## Shift+middle-drag, trackpad scroll), zoom (wheel, + / -, pinch), tilt
+## (Page Up / Down, T for top-down), F centers on your hero, R resets.
 
 signal cell_clicked(cell: Vector2i, button: int)
 signal cell_hovered(cell: Vector2i)
@@ -26,10 +28,14 @@ const BACKGROUND := Color(0.07, 0.08, 0.1)
 
 const FOV := 35.0
 const PITCH_DEFAULT := 0.92
-const PITCH_MIN := 0.35
-const PITCH_MAX := 1.5
-const ZOOM_MIN := 0.45
-const ZOOM_MAX := 1.6
+const PITCH_MIN := 0.2          # almost level with the table
+const PITCH_MAX := PI / 2 - 0.01  # straight down
+const ZOOM_MIN := 0.25
+const ZOOM_MAX := 2.5
+const ZOOM_STEP := 1.1
+const PAN_SPEED := 9.0          # tiles per second at default zoom
+const CAMERA_EASE := 14.0       # higher = camera catches up faster
+const TARGET_Y := 0.35          # height of the point the camera orbits
 const PICK_RADIUS := 0.32
 
 ## Whose eyes the board is drawn through: 0/1 = that side (fog shaded),
@@ -95,9 +101,15 @@ var _units := {}
 var _yaw := 0.0
 var _pitch := PITCH_DEFAULT
 var _zoom := 1.0
-var _orbiting := false
 var _target := Vector3.ZERO
+var _home := Vector3.INF   # the board's center, set once the board is sized
+var _cur_yaw := 0.0
+var _cur_pitch := PITCH_DEFAULT
+var _cur_zoom := 1.0
+var _cur_target := Vector3.ZERO
 var _fit_dist := 10.0
+enum Drag { NONE, ORBIT, PAN }
+var _drag := Drag.NONE
 
 
 func _ready() -> void:
@@ -162,6 +174,7 @@ func _ready() -> void:
 
 	resized.connect(_fit_camera)
 	mouse_exited.connect(_set_hover.bind(NO_CELL))
+	mouse_exited.connect(func(): _drag = Drag.NONE)
 
 
 ## Redraws everything from the current properties. Setting any property does
@@ -190,60 +203,170 @@ func _process(delta: float) -> void:
 	_time += delta
 	if _dirty:
 		_rebuild()
+	_update_camera(delta)
 	_animate(delta)
 	_draw_fx()
 	_hud.queue_redraw()
 
 
 # --- Input and camera ---------------------------------------------------------------
+#
+# The camera orbits a point on the board (_target). The goal values (_yaw,
+# _pitch, _zoom, _target) jump on input; the shown values (_cur_*) ease toward
+# them each frame, so turning and resetting glide instead of snapping.
 
 func _gui_input(event: InputEvent) -> void:
 	if state == null:
 		return
 	if event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
-		if _orbiting:
+		if _drag == Drag.ORBIT:
 			_yaw -= mm.relative.x * 0.008
 			_pitch = clampf(_pitch + mm.relative.y * 0.006, PITCH_MIN, PITCH_MAX)
-			_place_camera()
+		elif _drag == Drag.PAN:
+			_pan_by_drag(mm.position - mm.relative, mm.position)
 		_set_hover(_cell_at(mm.position))
 	elif event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		match mb.button_index:
 			MOUSE_BUTTON_WHEEL_UP:
 				if mb.pressed:
-					_zoom = clampf(_zoom / 1.1, ZOOM_MIN, ZOOM_MAX)
-					_place_camera()
+					_zoom_at(mb.position, 1.0 / ZOOM_STEP)
 			MOUSE_BUTTON_WHEEL_DOWN:
 				if mb.pressed:
-					_zoom = clampf(_zoom * 1.1, ZOOM_MIN, ZOOM_MAX)
-					_place_camera()
+					_zoom_at(mb.position, ZOOM_STEP)
 			MOUSE_BUTTON_MIDDLE:
-				_orbiting = mb.pressed
+				if not mb.pressed:
+					_drag = Drag.NONE
+				elif mb.shift_pressed:
+					_drag = Drag.PAN
+				else:
+					_drag = Drag.ORBIT
 			_:
-				if mb.pressed:
+				# Alt + left-drag orbits, for trackpads without a middle button.
+				if mb.button_index == MOUSE_BUTTON_LEFT and (mb.alt_pressed or _drag != Drag.NONE):
+					_drag = Drag.ORBIT if mb.pressed else Drag.NONE
+				elif mb.pressed:
 					var c := _cell_at(mb.position)
 					if c != NO_CELL:
 						cell_clicked.emit(c, mb.button_index)
-		accept_event()
+	elif event is InputEventPanGesture:
+		# Two-finger trackpad scroll pans.
+		var pg := event as InputEventPanGesture
+		_pan_screen(pg.delta * 0.03)
+	elif event is InputEventMagnifyGesture:
+		var mg := event as InputEventMagnifyGesture
+		_zoom_at(mg.position, 1.0 / mg.factor)
+	else:
+		return
+	accept_event()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not is_visible_in_tree() or not (event is InputEventKey) or not event.is_pressed():
 		return
-	match (event as InputEventKey).keycode:
+	var k := event as InputEventKey
+	match k.keycode:
 		KEY_Q:
-			_yaw += PI / 4
+			_yaw = _snap_yaw(_yaw + PI / 4)
 		KEY_E:
-			_yaw -= PI / 4
+			_yaw = _snap_yaw(_yaw - PI / 4)
 		KEY_R:
-			_yaw = 0.0
-			_pitch = PITCH_DEFAULT
-			_zoom = 1.0
+			_reset_view()
+		KEY_T:
+			# Toggle a straight-down, map-like view.
+			_pitch = PITCH_DEFAULT if _pitch > PITCH_MAX - 0.05 else PITCH_MAX
+		KEY_F:
+			if planner != null and planner.is_alive():
+				_target = Vector3(planner.pos.x + 0.5, TARGET_Y, planner.pos.y + 0.5)
+		KEY_PAGEUP:
+			_pitch = clampf(_pitch + 0.15, PITCH_MIN, PITCH_MAX)
+		KEY_PAGEDOWN:
+			_pitch = clampf(_pitch - 0.15, PITCH_MIN, PITCH_MAX)
+		KEY_EQUAL, KEY_KP_ADD:
+			_zoom = clampf(_zoom / ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)
+		KEY_MINUS, KEY_KP_SUBTRACT:
+			_zoom = clampf(_zoom * ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)
 		_:
 			return
-	_place_camera()
 	get_viewport().set_input_as_handled()
+
+
+## Rounds to the nearest 45 degrees, so Q / E land on tidy angles even after
+## free orbiting.
+func _snap_yaw(y: float) -> float:
+	return roundf(y / (PI / 4)) * (PI / 4)
+
+
+func _reset_view() -> void:
+	_yaw = 0.0
+	_pitch = PITCH_DEFAULT
+	_zoom = 1.0
+	_target = _home
+
+
+## WASD / arrow keys pan while held, relative to the way the camera faces.
+func _key_pan(delta: float) -> void:
+	if not is_visible_in_tree() or get_viewport().gui_get_focus_owner() is LineEdit:
+		return
+	var v := Vector2.ZERO
+	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT):
+		v.x -= 1
+	if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT):
+		v.x += 1
+	if Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP):
+		v.y -= 1
+	if Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN):
+		v.y += 1
+	if v != Vector2.ZERO:
+		_pan_screen(v.normalized() * PAN_SPEED * _zoom * delta)
+
+
+## Moves the target by `d` board tiles in screen terms: +x right, +y down.
+func _pan_screen(d: Vector2) -> void:
+	var right := Vector3(cos(_yaw), 0, -sin(_yaw))
+	var back := Vector3(sin(_yaw), 0, cos(_yaw))
+	_set_target(_target + right * d.x + back * d.y)
+
+
+## Drags the board so the ground point under `from` ends up under `to`.
+func _pan_by_drag(from: Vector2, to: Vector2) -> void:
+	var a: Variant = _ground_at(from)
+	var b: Variant = _ground_at(to)
+	if a != null and b != null:
+		_set_target(_target + (a as Vector3) - (b as Vector3))
+		_cur_target = _target
+
+
+## Zooms by `factor`, keeping the board point under the cursor in place.
+func _zoom_at(p: Vector2, factor: float) -> void:
+	var z := clampf(_zoom * factor, ZOOM_MIN, ZOOM_MAX)
+	var g: Variant = _ground_at(p)
+	if g != null:
+		var k := z / _zoom
+		var t := (g as Vector3) + (_target - (g as Vector3)) * k
+		_set_target(Vector3(t.x, TARGET_Y, t.z))
+	_zoom = z
+
+
+## Where a screen point's ray meets the camera's target height, or null.
+func _ground_at(p: Vector2) -> Variant:
+	if _cam == null:
+		return null
+	var o := _cam.project_ray_origin(p)
+	var n := _cam.project_ray_normal(p)
+	if n.y > -0.0001:
+		return null
+	return o + n * ((TARGET_Y - o.y) / n.y)
+
+
+## Keeps the target over the board (plus a margin) so it can't be lost.
+func _set_target(t: Vector3) -> void:
+	if state == null:
+		_target = t
+		return
+	var m := state.map
+	_target = Vector3(clampf(t.x, -1.0, m.width + 1.0), TARGET_Y, clampf(t.z, -1.0, m.height + 1.0))
 
 
 func _set_hover(c: Vector2i) -> void:
@@ -301,21 +424,37 @@ func _fit_camera() -> void:
 	if state == null or size.y < 1.0:
 		return
 	var m := state.map
-	_target = Vector3(m.width * 0.5, 0.35, m.height * 0.5)
+	var first := _home == Vector3.INF
+	_home = Vector3(m.width * 0.5, TARGET_Y, m.height * 0.5)
 	var half_fov := tan(deg_to_rad(FOV) * 0.5)
 	var aspect := size.x / size.y
 	var half_w := m.width * 0.5 + 0.7
 	var half_h := (m.height * sin(PITCH_DEFAULT) + 1.8 * cos(PITCH_DEFAULT)) * 0.5 + 0.3
 	_fit_dist = maxf(half_w / (half_fov * aspect), half_h / half_fov)
+	if first:
+		_target = _home
+		_cur_target = _home
+	_place_camera()
+
+
+func _update_camera(delta: float) -> void:
+	_key_pan(delta)
+	var k := 1.0 - exp(-CAMERA_EASE * delta)
+	_cur_yaw = lerpf(_cur_yaw, _yaw, k)
+	_cur_pitch = lerpf(_cur_pitch, _pitch, k)
+	_cur_zoom = lerpf(_cur_zoom, _zoom, k)
+	_cur_target = _cur_target.lerp(_target, k)
 	_place_camera()
 
 
 func _place_camera() -> void:
 	if _cam == null:
 		return
-	var dir := Vector3(sin(_yaw) * cos(_pitch), sin(_pitch), cos(_yaw) * cos(_pitch))
-	_cam.position = _target + dir * _fit_dist * _zoom
-	_cam.look_at(_target, Vector3.UP)
+	var dir := Vector3(sin(_cur_yaw) * cos(_cur_pitch), sin(_cur_pitch), cos(_cur_yaw) * cos(_cur_pitch))
+	_cam.position = _cur_target + dir * _fit_dist * _cur_zoom
+	# Looking straight down, "up" on screen is the far side of the board.
+	var up := Vector3.UP if _cur_pitch < 1.5 else Vector3(-sin(_cur_yaw), 0, -cos(_cur_yaw))
+	_cam.look_at(_cur_target, up)
 
 
 # --- Building the scene ------------------------------------------------------------
@@ -644,9 +783,38 @@ func _draw_hud() -> void:
 				_label_at(BoardModels.center(t), Vector2(0, 30), "after move", 11, DELAYED_COLOR)
 	if prev_state != null:
 		_phase_labels()
-	var hint := "Wheel: zoom   Middle-drag: orbit   Q / E: turn   R: reset view"
+	var hints := [
+		"Orbit: middle-drag / Alt+drag / Q E    Pan: WASD / arrows / Shift+middle-drag",
+		"Zoom: wheel / + -    Tilt: PgUp PgDn    T: top-down    F: find hero    R: reset",
+	]
 	var font := ThemeDB.fallback_font
-	_hud.draw_string(font, Vector2(10, size.y - 10), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.4))
+	var hint_w := 0.0
+	for h in hints:
+		hint_w = maxf(hint_w, font.get_string_size(h, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x)
+	_hud.draw_rect(Rect2(4, size.y - 15 * hints.size() - 12, hint_w + 12, 15 * hints.size() + 8), Color(0, 0, 0, 0.45))
+	for i in hints.size():
+		_hud.draw_string(font, Vector2(10, size.y - 10 - 15 * (hints.size() - 1 - i)), hints[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.6))
+	_draw_compass()
+
+
+## A small dial in the corner: the arrow points from West's Base to East's,
+## so you never lose track of which way the lane runs.
+func _draw_compass() -> void:
+	var a: Variant = _screen(_cur_target)
+	var b: Variant = _screen(_cur_target + Vector3.RIGHT)
+	if a == null or b == null or ((b as Vector2) - (a as Vector2)).length() < 0.001:
+		return
+	var d := ((b as Vector2) - (a as Vector2)).normalized()
+	var r := 24.0
+	var c := Vector2(size.x - r - 28, r + 26)
+	_hud.draw_circle(c, r, Color(0, 0, 0, 0.45))
+	_hud.draw_arc(c, r, 0, TAU, 32, Color(1, 1, 1, 0.25), 1.5, true)
+	var tip := c + d * (r - 7)
+	_hud.draw_line(c - d * (r - 7), tip, Color(1, 1, 1, 0.7), 2.0, true)
+	var side := Vector2(-d.y, d.x) * 4.0
+	_hud.draw_colored_polygon(PackedVector2Array([tip + d * 2, tip - d * 6 + side, tip - d * 6 - side]), Color(1, 1, 1, 0.8))
+	_text(c - d * (r + 10) + Vector2(0, 4), "W", 11, SIDE_COLORS[Rules.WEST].lightened(0.3))
+	_text(c + d * (r + 10) + Vector2(0, 4), "E", 11, SIDE_COLORS[Rules.EAST].lightened(0.3))
 
 
 func _unit_labels(u: Unit, at: Vector3, alpha: float) -> void:
